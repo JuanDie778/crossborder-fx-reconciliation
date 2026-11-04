@@ -1,0 +1,5 @@
+# crossborder-fx-reconciliation dependencies
+numpy>=1.24.0
+pandas>=2.0.0
+pytest>=7.4.0
+ruff>=0.1.0

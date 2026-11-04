@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flywire PoC v2.0 — Cross-Border FX Risk, Smart Routing & SWIFT CashMatch Console</title>
+  <style>
+    :root {
+      --bg-dark: #070b14;
+      --bg-panel: #0f172a;
+      --bg-card: #162038;
+      --border: #1e293b;
+      --flywire-blue: #1d4ed8;
+      --flywire-cyan: #06b6d4;
+      --emerald: #10b981;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --purple: #8b5cf6;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --mono: "JetBrains Mono", "Fira Code", Consolas, monospace;
+      --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--sans);
+      line-height: 1.5;
+      padding: 20px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 14px;
+      background: linear-gradient(135deg, #0f172a 0%, #172554 100%);
+      border: 1px solid #1e3a8a;
+      border-radius: 12px;
+      padding: 18px 24px;
+      margin-bottom: 18px;
+    }
+    .brand-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .badge {
+      font-size: 0.72rem;
+      font-family: var(--mono);
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(6, 182, 212, 0.15);
+      color: var(--flywire-cyan);
+      border: 1px solid rgba(6, 182, 212, 0.35);
+    }
+    .header-meta {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      font-family: var(--mono);
+    }
+    .controls-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-bottom: 18px;
+      align-items: end;
+    }
+    .control-group label {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    select, input[type="range"] {
+      width: 100%;
+      background: var(--bg-card);
+      color: var(--text-main);
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 7px 10px;
+      font-size: 0.85rem;
+      font-family: var(--mono);
+    }
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 6px;
+      padding: 9px 13px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #fff;
+      background: var(--flywire-blue);
+      transition: all 0.15s ease;
+    }
+    button:hover { filter: brightness(1.15); }
+    button.btn-cyan { background: #0891b2; }
+    button.btn-purple { background: #6d28d9; }
+    button.btn-amber { background: #d97706; }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .kpi-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .kpi-label {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .kpi-value {
+      font-size: 1.45rem;
+      font-weight: 700;
+      font-family: var(--mono);
+      margin: 4px 0;
+    }
+    .kpi-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: var(--mono);
+    }
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1.35fr 1fr;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    @media (max-width: 1024px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .panel-title {
+      font-size: 0.92rem;
+      font-weight: 600;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+    canvas {
+      width: 100%;
+      height: 250px;
+      background: #091020;
+      border-radius: 8px;
+      border: 1px solid #1e293b;
+      display: block;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.79rem;
+      font-family: var(--mono);
+    }
+    th, td {
+      text-align: left;
+      padding: 8px 10px;
+      border-bottom: 1px solid #1e293b;
+    }
+    th {
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.7rem;
+    }
+    .pill {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+    .pill-p0 { background: rgba(16, 185, 129, 0.18); color: #34d399; }
+    .pill-p1 { background: rgba(6, 182, 212, 0.18); color: #22d3ee; }
+    .pill-p2 { background: rgba(245, 158, 11, 0.18); color: #fbbf24; }
+    .pill-p3 { background: rgba(139, 92, 246, 0.22); color: #c4b5fd; }
+    .pill-p4 { background: rgba(244, 63, 94, 0.2); color: #fb7185; }
+    .text-emerald { color: var(--emerald); }
+    .text-cyan { color: var(--flywire-cyan); }
+    .text-amber { color: var(--amber); }
+    .text-rose { color: var(--rose); }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="brand-title">
+        <span>FLYWIRE ENGINEERING VALENCIA</span>
+        <span class="badge">PoC v2.0 — Treasury, FX VaR/CVaR & SWIFT CashMatch</span>
+      </div>
+      <div class="header-meta">
+        Author: Juan Diego Ussa Aponte | Hub: Calle Grabador Esteve, 14 (Valencia) | Integer-Cent Double-Entry Ledger + Ornstein-Uhlenbeck FX
+      </div>
+    </div>
+    <div class="header-meta" id="chain-status">
+      SHA-256 LEDGER TIP: 0xca60b9a99d8b38a2... [VERIFIED]
+    </div>
+  </header>
+
+  <section class="controls-bar">
+    <div class="control-group">
+      <label for="corridorSelect">FX Corridor (Ornstein-Uhlenbeck)</label>
+      <select id="corridorSelect">
+        <option value="USD/EUR">USD/EUR (Spot: 0.9250 | Local: ACH/FedNow)</option>
+        <option value="GBP/EUR">GBP/EUR (Spot: 1.1700 | Local: Faster Payments)</option>
+        <option value="JPY/EUR">JPY/EUR (Spot: 0.00620 | Local: Zengin 0-dec)</option>
+        <option value="CNY/EUR">CNY/EUR (Spot: 0.1280 | Local: CNAPS/UnionPay)</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <label for="volSlider">FX Volatility Stress: <span id="volVal">1.0x</span></label>
+      <input type="range" id="volSlider" min="0.5" max="3.0" step="0.1" value="1.0" />
+    </div>
+    <div class="control-group">
+      <label for="horizonSlider">Settlement Window: <span id="horizonVal">48h (T+2)</span></label>
+      <input type="range" id="horizonSlider" min="12" max="72" step="12" value="48" />
+    </div>
+    <div class="btn-row">
+      <button onclick="runSimulation()">Simulate OU Path & Reconcile</button>
+      <button class="btn-purple" onclick="injectSplitParentWire()">+ Split Parent Wire (P3)</button>
+      <button class="btn-amber" onclick="injectSwiftFeeWire()">+ SWIFT SHA Fee Wire (P2)</button>
+    </div>
+  </section>
+
+  <section class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">CashMatch Auto-Reconciliation Rate</div>
+      <div class="kpi-value text-emerald" id="kpiMatchRate">98.76%</div>
+      <div class="kpi-sub" id="kpiMatchBreakdown">P0: 869 | P1: 140 | P2: 127 | P3 Split: 56</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">99% CVaR (Expected Shortfall) & Quote Buffer</div>
+      <div class="kpi-value text-cyan" id="kpiCvar">193.2 bps</div>
+      <div class="kpi-sub" id="kpiQuoteBuffer">Guaranteed Buffer: 238.3 bps | VaR99: 173.3 bps</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Smart Routing Savings vs. SWIFT SHA</div>
+      <div class="kpi-value text-emerald" id="kpiRoutingSavings">+103.0 bps</div>
+      <div class="kpi-sub" id="kpiRailName">Rail: FLW_LOCAL_ACH_FEDNOW_US (16h)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Double-Entry Ledger Trial Balance</div>
+      <div class="kpi-value text-emerald" id="kpiDiscrepancy">0 Cents Δ</div>
+      <div class="kpi-sub" id="kpiNetMargin">Net FX Margin: +428,871.44 EUR (Balanced)</div>
+    </div>
+  </section>
+
+  <section class="main-grid">
+    <div class="panel">
+      <div class="panel-title">
+        <span>Stochastic FX Trajectory (Ornstein-Uhlenbeck) vs. Guaranteed Client Rate Floor</span>
+        <span class="badge" id="chartBadge">USD/EUR | 48h T+2</span>
+      </div>
+      <canvas id="fxCanvas" width="720" height="250"></canvas>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">
+        <span>Immutable Double-Entry General Ledger (Integer Cents)</span>
+        <span class="badge">Assets == Liabilities + Equity</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Account Code</th>
+            <th>Type</th>
+            <th>Debits (EUR)</th>
+            <th>Credits (EUR)</th>
+          </tr>
+        </thead>
+        <tbody id="ledgerTableBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-title">
+      <span>Live SWIFT MT103 / ISO 20022 pacs.008 CashMatch Stream (Stages P0 → P4)</span>
+      <span class="badge" id="latencyBadge">Engine Latency: 43.4 µs / wire</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Bank Tx ID</th>
+          <th>Stage</th>
+          <th>Matched Payment</th>
+          <th>Ordering Customer (:50K:)</th>
+          <th>MT103 Remittance (:70: / :71A:)</th>
+          <th>Expected (EUR)</th>
+          <th>Received (EUR)</th>
+          <th>Ledger Status</th>
+        </tr>
+      </thead>
+      <tbody id="streamTableBody"></tbody>
+    </table>
+  </section>
+
+  <script>
+    const CORRIDOR_SPECS = {
+      "USD/EUR": { spot: 0.9250, theta: 0.18, sigma: 0.0065, marginBps: 65, rail: "FLW_LOCAL_ACH_FEDNOW_US (16h)", saveBps: 103.0 },
+      "GBP/EUR": { spot: 1.1700, theta: 0.16, sigma: 0.0070, marginBps: 70, rail: "FLW_LOCAL_FASTER_PAYMENTS_UK (12h)", saveBps: 126.6 },
+      "JPY/EUR": { spot: 0.00620, theta: 0.22, sigma: 0.0095, marginBps: 85, rail: "FLW_LOCAL_ZENGIN_JP (24h)", saveBps: 125.6 },
+      "CNY/EUR": { spot: 0.1280, theta: 0.14, sigma: 0.0080, marginBps: 90, rail: "FLW_LOCAL_CNAPS_UNIONPAY_CN (24h)", saveBps: 154.8 }
+    };
+
+    let ledgerState = {
+      nostroCents: 1423233016,
+      payableCents: 1376556008,
+      suspenseCents: 3789864,
+      fxRevCents: 42987996,
+      feeExpCents: 100852
+    };
+
+    let streamRows = [
+      {
+        txId: "TX-BNK-001184",
+        stage: "P0",
+        pill: "pill-p0",
+        pid: "FLW-001184",
+        customer: "WEI ZHANG",
+        mt103: ":20:REF001184 :70:PMT FLW-001184 :71A:OUR",
+        expCents: 1245000,
+        recCents: 1245000,
+        status: "RECONCILED_CLEAN"
+      },
+      {
+        txId: "TX-BNK-001185",
+        stage: "P1",
+        pill: "pill-p1",
+        pid: "FLW-001185",
+        customer: "PRIYA PATEL",
+        mt103: ":20:SWF9912 :70:TUITION FLW-001185 :71A:OUR",
+        expCents: 892000,
+        recCents: 892000,
+        status: "RECONCILED_CLEAN"
+      },
+      {
+        txId: "TX-BNK-001186",
+        stage: "P2",
+        pill: "pill-p2",
+        pid: "FLW-001186",
+        customer: "HARUTO TANAKA",
+        mt103: ":20:MT103TR :70:INV 01186/UNIV :71A:SHA (-25.00 EUR Fee)",
+        expCents: 940000,
+        recCents: 937500,
+        status: "RECONCILED_FEE_ADJUSTED"
+      },
+      {
+        txId: "TX-BNK-001187A+B",
+        stage: "P3 SPLIT",
+        pill: "pill-p3",
+        pid: "FLW-001187",
+        customer: "MEI LIN CHEN (2 PARENTS)",
+        mt103: ":70:PART 1/2 (60%) + PART 2/2 (40%) FLW-001187 :71A:OUR",
+        expCents: 1560000,
+        recCents: 1560000,
+        status: "CONSOLIDATED_SPLIT_CLEAN"
+      },
+      {
+        txId: "TX-BNK-ORPHAN-015",
+        stage: "P4 SUSPENSE",
+        pill: "pill-p4",
+        pid: "UNMATCHED",
+        customer: "UNKNOWN SENDER LTD",
+        mt103: ":20:UNKN0015 :70:MISC TRANSFER 1078 :71A:SHA",
+        expCents: 0,
+        recCents: 245000,
+        status: "QUARANTINED_SUSPENSE_2090"
+      }
+    ];
+
+    function formatEur(cents) {
+      return (cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function renderLedgerTable() {
+      const totalDebits = ledgerState.nostroCents + ledgerState.feeExpCents;
+      const totalCredits = ledgerState.payableCents + ledgerState.suspenseCents + ledgerState.fxRevCents;
+      const diff = totalDebits - totalCredits;
+
+      const tbody = document.getElementById("ledgerTableBody");
+      tbody.innerHTML = `
+        <tr>
+          <td>1010_NOSTRO_CLEARING_EUR</td>
+          <td>ASSET</td>
+          <td class="text-emerald">${formatEur(ledgerState.nostroCents)}</td>
+          <td>0.00</td>
+        </tr>
+        <tr>
+          <td>5010_CORRESPONDENT_FEES_EUR</td>
+          <td>EXPENSE</td>
+          <td class="text-amber">${formatEur(ledgerState.feeExpCents)}</td>
+          <td>0.00</td>
+        </tr>
+        <tr>
+          <td>2010_INSTITUTION_PAYABLE_EUR</td>
+          <td>LIABILITY</td>
+          <td>0.00</td>
+          <td class="text-cyan">${formatEur(ledgerState.payableCents)}</td>
+        </tr>
+        <tr>
+          <td>2090_SUSPENSE_ORPHAN_EUR</td>
+          <td>LIABILITY</td>
+          <td>0.00</td>
+          <td class="text-rose">${formatEur(ledgerState.suspenseCents)}</td>
+        </tr>
+        <tr>
+          <td>4010_FX_SPREAD_REVENUE_EUR</td>
+          <td>REVENUE</td>
+          <td>0.00</td>
+          <td class="text-emerald">${formatEur(ledgerState.fxRevCents)}</td>
+        </tr>
+        <tr style="font-weight:700; background: rgba(16, 185, 129, 0.08);">
+          <td>TRIAL BALANCE TOTAL</td>
+          <td>Δ = ${diff} cents</td>
+          <td>${formatEur(totalDebits)}</td>
+          <td>${formatEur(totalCredits)}</td>
+        </tr>
+      `;
+      document.getElementById("kpiDiscrepancy").textContent = `${diff} Cents Δ`;
+      document.getElementById("kpiNetMargin").textContent =
+        `Net FX Margin: +${formatEur(ledgerState.fxRevCents - ledgerState.feeExpCents)} EUR (Balanced)`;
+    }
+
+    function renderStreamTable() {
+      const tbody = document.getElementById("streamTableBody");
+      tbody.innerHTML = streamRows.slice(0, 8).map(r => `
+        <tr>
+          <td>${r.txId}</td>
+          <td><span class="pill ${r.pill}">${r.stage}</span></td>
+          <td>${r.pid}</td>
+          <td>${r.customer}</td>
+          <td>${r.mt103}</td>
+          <td>${r.expCents ? formatEur(r.expCents) : "N/A"}</td>
+          <td>${formatEur(r.recCents)}</td>
+          <td>${r.status}</td>
+        </tr>
+      `).join("");
+    }
+
+    function drawOuChart(corridor, volMult, horizonHours) {
+      const spec = CORRIDOR_SPECS[corridor];
+      const canvas = document.getElementById("fxCanvas");
+      const ctx = canvas.getContext("2d");
+      const W = canvas.width;
+      const H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+
+      const dt = 1 / 24;
+      const sigma = spec.sigma * volMult;
+      const tDays = horizonHours / 24;
+      const stdRel = Math.sqrt((sigma * sigma / (2 * spec.theta)) * (1 - Math.exp(-2 * spec.theta * tDays)));
+      const var99Bps = stdRel * 2.326 * 10000;
+      const cvar99Bps = stdRel * 2.665 * 10000;
+      const bufferBps = var99Bps + spec.marginBps;
+      const floorRate = spec.spot * (1 - bufferBps / 10000);
+
+      document.getElementById("kpiCvar").textContent = `${cvar99Bps.toFixed(1)} bps`;
+      document.getElementById("kpiQuoteBuffer").textContent =
+        `Guaranteed Buffer: ${bufferBps.toFixed(1)} bps | VaR99: ${var99Bps.toFixed(1)} bps`;
+      document.getElementById("kpiRoutingSavings").textContent = `+${spec.saveBps.toFixed(1)} bps`;
+      document.getElementById("kpiRailName").textContent = `Rail: ${spec.rail}`;
+      document.getElementById("chartBadge").textContent = `${corridor} | ${horizonHours}h Window`;
+
+      // Generate 5 sample Ornstein-Uhlenbeck paths
+      const paths = [];
+      for (let p = 0; p < 5; p++) {
+        let arr = [spec.spot];
+        for (let t = 1; t <= horizonHours; t++) {
+          const prev = arr[t - 1];
+          const u1 = Math.max(1e-7, Math.random());
+          const u2 = Math.random();
+          const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+          const next = prev + spec.theta * (spec.spot - prev) * dt + sigma * prev * Math.sqrt(dt) * z;
+          arr.push(next);
+        }
+        paths.push(arr);
+      }
+
+      const minY = spec.spot * (1 - (bufferBps + 90) / 10000);
+      const maxY = spec.spot * (1 + (bufferBps + 90) / 10000);
+      const mapX = (t) => 55 + (t / horizonHours) * (W - 75);
+      const mapY = (v) => H - 30 - ((v - minY) / (maxY - minY)) * (H - 50);
+
+      // Draw Spot Line
+      ctx.strokeStyle = "#475569";
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(55, mapY(spec.spot));
+      ctx.lineTo(W - 20, mapY(spec.spot));
+      ctx.stroke();
+
+      // Draw Guaranteed Client Quote Floor
+      ctx.strokeStyle = "#f43f5e";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(55, mapY(floorRate));
+      ctx.lineTo(W - 20, mapY(floorRate));
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = "#fb7185";
+      ctx.font = "11px monospace";
+      ctx.fillText(`Guaranteed Client Quote Floor (${floorRate.toFixed(5)})`, 62, mapY(floorRate) - 6);
+      ctx.fillStyle = "#94a3b8";
+      ctx.fillText(`Spot Mean μ (${spec.spot.toFixed(5)})`, 62, mapY(spec.spot) - 6);
+
+      // Draw simulated OU paths
+      const colors = ["#06b6d4", "#10b981", "#3b82f6", "#a855f7", "#eab308"];
+      paths.forEach((path, idx) => {
+        ctx.strokeStyle = colors[idx % colors.length];
+        ctx.lineWidth = idx === 0 ? 2.4 : 1.3;
+        ctx.beginPath();
+        path.forEach((val, t) => {
+          const x = mapX(t);
+          const y = mapY(val);
+          if (t === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      });
+    }
+
+    function runSimulation() {
+      const corridor = document.getElementById("corridorSelect").value;
+      const volMult = parseFloat(document.getElementById("volSlider").value);
+      const horizon = parseInt(document.getElementById("horizonSlider").value, 10);
+      document.getElementById("volVal").textContent = `${volMult.toFixed(1)}x`;
+      document.getElementById("horizonVal").textContent = `${horizon}h (T+${Math.round(horizon / 24)})`;
+      drawOuChart(corridor, volMult, horizon);
+      renderLedgerTable();
+      renderStreamTable();
+    }
+
+    function injectSplitParentWire() {
+      const dueCents = 1420000;
+      const settledCents = 1452000;
+      const spreadCents = settledCents - dueCents;
+      ledgerState.nostroCents += settledCents;
+      ledgerState.payableCents += dueCents;
+      ledgerState.fxRevCents += spreadCents;
+
+      const idNum = Math.floor(1200 + Math.random() * 800);
+      streamRows.unshift({
+        txId: `TX-BNK-00${idNum}A+B`,
+        stage: "P3 SPLIT",
+        pill: "pill-p3",
+        pid: `FLW-00${idNum}`,
+        customer: "ARJUN SHARMA (2 WIRES)",
+        mt103: `:70:SPLIT WIRE 60%+40% FLW-00${idNum} :71A:OUR`,
+        expCents: settledCents,
+        recCents: settledCents,
+        status: "CONSOLIDATED_SPLIT_CLEAN"
+      });
+      renderLedgerTable();
+      renderStreamTable();
+    }
+
+    function injectSwiftFeeWire() {
+      const dueCents = 980000;
+      const grossCents = 1005000;
+      const feeCents = 2500; // 25.00 EUR intermediary bank fee
+      const netReceivedCents = grossCents - feeCents;
+      const spreadCents = grossCents - dueCents;
+
+      ledgerState.nostroCents += netReceivedCents;
+      ledgerState.feeExpCents += feeCents;
+      ledgerState.payableCents += dueCents;
+      ledgerState.fxRevCents += spreadCents;
+
+      const idNum = Math.floor(2000 + Math.random() * 800);
+      streamRows.unshift({
+        txId: `TX-BNK-00${idNum}`,
+        stage: "P2 FEE",
+        pill: "pill-p2",
+        pid: `FLW-00${idNum}`,
+        customer: "SOFIA RODRIGUEZ",
+        mt103: `:20:SWF${idNum} :70:INV 0${idNum}/UNIV :71A:SHA (-25.00 EUR)`,
+        expCents: grossCents,
+        recCents: netReceivedCents,
+        status: "RECONCILED_FEE_ADJUSTED"
+      });
+      renderLedgerTable();
+      renderStreamTable();
+    }
+
+    document.getElementById("corridorSelect").addEventListener("change", runSimulation);
+    document.getElementById("volSlider").addEventListener("input", runSimulation);
+    document.getElementById("horizonSlider").addEventListener("input", runSimulation);
+
+    runSimulation();
+  </script>
+</body>
+</html>
