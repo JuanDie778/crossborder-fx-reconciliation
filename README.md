@@ -1,4 +1,4 @@
-# `crossborder-fx-reconciliation`: Predicción de Fricción en Pagos Transfronterizos y Motor de Resiliencia FinTech
+# Predictive Cross-Border Payments: Motor de Inferencia de Retrasos y Resiliencia Financiera
 
 [![CI Pipeline](https://github.com/JuanDie778/crossborder-fx-reconciliation/actions/workflows/ci.yml/badge.svg)](https://github.com/JuanDie778/crossborder-fx-reconciliation/actions)
 [![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.14-blue.svg)](https://www.python.org/)
@@ -8,24 +8,24 @@
 [![Reducción Pérdidas](https://img.shields.io/badge/Ahorro%20Operativo--47.5%25-success.svg)](#5-resultados-y-comparativa-antes-y-después-de-la-ciencia-de-datos)
 [![Capital Protegido](https://img.shields.io/badge/Capital%20Protegido-%24124.7M%20USD-gold.svg)](#6-laboratorio-de-cisnes-negros-simulador-de-estrés-y-resiliencia-what-if)
 
-> **Un proyecto aplicado de Ciencia de Datos, Teoría de Colas y Optimización Financiera para la industria global de pagos.**  
+> **Sistema Integral de Machine Learning, Teoría de Colas y Optimización Financiera para Pagos Transfronterizos.**  
 > *Inspirado en los retos operativos reales de pasarelas internacionales de educación y salud (ecosistema Flywire).*  
 > **Autor:** Juan Diego Ussa Aponte (Valencia, España) • [GitHub](https://github.com/JuanDie778/crossborder-fx-reconciliation)
 
 ---
 
-> ### ⚡ TL;DR / El Gancho Ejecutivo en 30 Segundos
-> **¿Por qué una transferencia de \$18.000 para pagar una matrícula universitaria puede tardar 5 días si un WhatsApp cruza el planeta en 200 milisegundos?**  
+> ### ⚡ Executive Briefing: El Dilema del Capital en Tránsito
+> **En la banca internacional, hasta un 30% de los pagos transfronterizos experimentan fricciones en la red de corresponsalía que no pueden anticiparse con reglas de calendario tradicionales.**
 > 
-> * **El Escándalo Oculto:** Casi 1 de cada 3 transferencias internacionales cruzan una telaraña de bancos corresponsales, horarios asíncronos y filtros de divisas que la banca tradicional intenta adivinar con reglas fijas de calendario. El resultado: familias angustiadas con matrículas congeladas y millones de dólares en costes de soporte.
-> * **El Giro de Tuerca con Data Science:** Sustituimos las corazonadas por tipos reales del Banco Central Europeo, teoría de colas $M/G/1$, entropía léxica en mensajes SWIFT y optimización de pérdida asimétrica.
-> * **El Impacto:** Captura anticipada del **94.8% de los retrasos**, reducción del **47.5% en pérdidas operativas** y más de **\$124M USD blindados** ante choques extremos de mercado.
+> * **El Desafío Operativo:** En verticales de alto valor (como matrículas universitarias internacionales o pagos médicos), cada día de retraso no previsto bloquea liquidez, satura las mesas de soporte con tickets de alta prioridad e interrumpe procesos institucionales críticos (congelación de matrículas por vencimiento de plazos).
+> * **El Enfoque Cuantitativo:** Sustituimos las reglas fijas de calendario por un pipeline de inferencia probabilística basado en series macroeconómicas del Banco Central Europeo, física de colas $M/G/1$ (congestión no lineal en ventanas RTGS), entropía léxica en mensajes SWIFT y optimización bayesiana de coste asimétrico.
+> * **Impacto Medible en Negocio:** Captura anticipada del **94.8% de las transacciones con retraso**, reducción del **47.5% en pérdidas operativas** y más de **\$124M USD blindados** mediante simulación de escenarios de estrés macroeconómico.
 
 ---
 
 ## Índice Interactivo
 
-1. [El Misterio del Dinero que Desaparece: Una Historia Humana](#1-el-misterio-del-dinero-que-desaparece-una-historia-humana)
+1. [El Problema Operativo: Fricción y Latencia en Pagos Transfronterizos de Alto Impacto](#1-el-problema-operativo-fricción-y-latencia-en-pagos-transfronterizos-de-alto-impacto)
 2. [La Problemática Invisible: El Viaje de una Transferencia Internacional](#2-la-problemática-invisible-el-viaje-de-una-transferencia-internacional)
 3. [Por qué Falla la Banca Tradicional: El Fracaso de las Reglas Estáticas](#3-por-qué-falla-la-banca-tradicional-el-fracaso-de-las-reglas-estáticas)
 4. [Nuestra Solución con Ciencia de Datos: De la Intuición al Machine Learning](#4-nuestra-solución-con-ciencia-de-datos-de-la-intuición-al-machine-learning)
@@ -38,17 +38,17 @@
 
 ---
 
-## 1. El Misterio del Dinero que Desaparece: Una Historia Humana
+## 1. El Problema Operativo: Fricción y Latencia en Pagos Transfronterizos de Alto Impacto
 
-Imagina a una familia en Chengdu (China) o Bangalore (India). Llevan años ahorrando para enviar a su hija a estudiar un máster a Valencia, Londres o Boston. 
+Consideremos el flujo de fondos en pasarelas educativas globales: un pagador en Chengdu (China) o Bangalore (India) instruye una transferencia equivalente a \$18.000 USD para abonar la matrícula universitaria en una institución en Europa o Estados Unidos. A pesar de que la entidad emisora emite el comprobante y comunica una ventana estimada de 48 horas hábiles, los fondos pueden tardar entre 4 y 7 días en conciliarse efectivamente en la tesorería de destino.
 
-Es un martes por la mañana. Acuden a su sucursal bancaria local, transfieren 18.000 dólares equivalentes para la matrícula y el banco emite el resguardo. Les aseguran que *«en dos días hábiles estará resuelto»*.
+Este desfase genera fricciones operativas y financieras concretas:
 
-Llega el viernes por la tarde. El dinero ya no está en la cuenta de los padres, pero **la universidad aún no lo ha recibido**. La tesorería de la universidad, sujeta a sistemas automáticos, congela la inscripción de la alumna y cancela su plaza de residencia. La familia entra en pánico, el estudiante pasa el fin de semana sin dormir y el lunes por la mañana el equipo de soporte al cliente de la pasarela de pagos se encuentra con cientos de tickets de auxilio colapsando sus bandejas de entrada.
+* **Riesgo de Interrupción del Servicio:** Los sistemas de tesorería académica aplican cierres automáticos estrictos; si los fondos no se acreditan en fecha límite, se suspenden temporalmente matrículas, visados o reservas de residencia estudiantil.
+* **Opacidad en el Tránsito Interbancario:** Durante el trayecto a través de la banca corresponsal, ni el pagador ni el beneficiario final cuentan con visibilidad en tiempo real sobre el estado del expediente o las deducciones imprevistas (*lifting fees*).
+* **Sobrecarga en Mesas de Operaciones:** Cada pago demorado sin notificación previa genera múltiples contactos en el centro de atención al cliente, con un coste estimado de **\$35 a \$45 USD por ticket escalado**.
 
-¿Dónde estuvo ese dinero durante más de 80 horas? ¿Por qué nadie lo vio venir si el pago se emitió un martes por la mañana? 
-
-Este proyecto nació para responder a esa pregunta, erradicar la incertidumbre de miles de estudiantes y ahorrar millones de dólares en pérdidas operativas mediante **Ciencia de Datos aplicada**.
+Este proyecto aborda este problema mediante **Ciencia de Datos aplicada**: predecir con precisión probabilística la latencia y el riesgo de retraso en el momento exacto en que se instruye la orden de pago, permitiendo a la pasarela intervenir proactivamente, ajustar rutas de compensación y proteger la experiencia operativa.
 
 ---
 
