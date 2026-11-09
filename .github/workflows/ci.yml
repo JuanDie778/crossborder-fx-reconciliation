@@ -32,10 +32,10 @@ jobs:
         run: |
           ruff check .
 
-      - name: Run Test Suite with pytest
+      - name: Run Test Suite with pytest (Ledger + Data Science Pipeline)
         run: |
-          pytest test_flywire_poc.py -v
+          pytest test_flywire_poc.py test_data_science_pipeline.py -v
 
-      - name: Run Institutional Benchmark Smoke Test
+      - name: Run Data Science Benchmark Smoke Test
         run: |
-          python fx_arbitrage_reconciliation_engine.py
+          python -m crossborder_ds.pipeline_runner

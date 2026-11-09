@@ -18,7 +18,6 @@ import re
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple
 
 from domain_ledger import (
     ImmutableDoubleEntryLedger,
@@ -26,13 +25,14 @@ from domain_ledger import (
     PaymentState,
 )
 
-
 FLW_REF_REGEX = re.compile(r"FLW-(\d{6})", re.IGNORECASE)
 SUFFIX_DIGITS_REGEX = re.compile(r"(?<!\d)(\d{5,6})(?!\d)")
-MT103_TAG_REGEX = re.compile(r":(20|32A|50K|70|71A|71F):(.*?)(?=:(?:20|32A|50K|70|71A|71F):|$)", re.DOTALL)
+MT103_TAG_REGEX = re.compile(
+    r":(20|32A|50K|70|71A|71F):(.*?)(?=:(?:20|32A|50K|70|71A|71F):|$)", re.DOTALL
+)
 SPLIT_MARKER_REGEX = re.compile(r"\b(SPLIT|PART\s*\d+|INSTALLMENT)\b", re.IGNORECASE)
 
-ISO20022_CHARGE_MAP: Dict[str, str] = {
+ISO20022_CHARGE_MAP: dict[str, str] = {
     "DEBT": "OUR",
     "SHAR": "SHA",
     "CRED": "BEN",
@@ -60,8 +60,8 @@ class ParsedMT103Fields:
     remittance_info_70: str = ""
     charge_code_71a: str = "SHA"
     sender_charges_71f: str = ""
-    extracted_flw_id: Optional[str] = None
-    extracted_suffixes: List[str] = field(default_factory=list)
+    extracted_flw_id: str | None = None
+    extracted_suffixes: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -80,7 +80,7 @@ class ReconciliationResultSummary:
     total_correspondent_fees_cents: int
     net_fx_margin_cents: int
     reconciliation_rate_pct: float
-    ledger_trial_balance: Dict[str, int]
+    ledger_trial_balance: dict[str, int]
 
 
 def _parse_iso20022_xml_into_fields(raw_xml: str, parsed: ParsedMT103Fields) -> bool:
@@ -98,7 +98,7 @@ def _parse_iso20022_xml_into_fields(raw_xml: str, parsed: ParsedMT103Fields) -> 
 
     instr_id = ""
     end_to_end_id = ""
-    ustrd_parts: List[str] = []
+    ustrd_parts: list[str] = []
 
     for elem in root.iter():
         local_name = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
@@ -125,7 +125,9 @@ def _parse_iso20022_xml_into_fields(raw_xml: str, parsed: ParsedMT103Fields) -> 
     return True
 
 
-def parse_swift_mt103_narration(raw_narration: str, fallback_ref: str = "") -> ParsedMT103Fields:
+def parse_swift_mt103_narration(
+    raw_narration: str, fallback_ref: str = ""
+) -> ParsedMT103Fields:
     """
     Extracts structured tags from a raw SWIFT MT103 block, ISO 20022 pacs.008 XML document,
     or unstructured remittance string.
@@ -154,7 +156,7 @@ def parse_swift_mt103_narration(raw_narration: str, fallback_ref: str = "") -> P
     if flw_match:
         parsed.extracted_flw_id = f"FLW-{int(flw_match.group(1)):06d}"
 
-    suffixes: List[str] = []
+    suffixes: list[str] = []
     for m in SUFFIX_DIGITS_REGEX.finditer(combined_search_text):
         digits = m.group(1)
         sfx = digits[-5:]
@@ -186,21 +188,23 @@ class SwiftCashMatchEngine:
     def __init__(
         self,
         max_intermediary_fee_cents: int = 4500,  # Up to 45.00 EUR intermediary SWIFT fee tolerance
-        fee_anomaly_threshold_cents: int = 1000, # >= 10.00 EUR shortfall flagged as fee discrepancy
+        fee_anomaly_threshold_cents: int = 1000,  # >= 10.00 EUR shortfall flagged as fee discrepancy
     ) -> None:
         self.max_intermediary_fee_cents = max_intermediary_fee_cents
         self.fee_anomaly_threshold_cents = fee_anomaly_threshold_cents
 
-    def _is_single_wire_within_fee_window(self, exp_gross_cents: int, received_cents: int) -> bool:
+    def _is_single_wire_within_fee_window(
+        self, exp_gross_cents: int, received_cents: int
+    ) -> bool:
         shortfall_cents = exp_gross_cents - received_cents
         return -500 <= shortfall_cents <= self.max_intermediary_fee_cents
 
     def reconcile_batch(
         self,
-        commitments: List[PaymentCommitment],
-        bank_lines: List[BankStatementLine],
-        settlement_fx_rates: Dict[str, float],
-        ledger: Optional[ImmutableDoubleEntryLedger] = None,
+        commitments: list[PaymentCommitment],
+        bank_lines: list[BankStatementLine],
+        settlement_fx_rates: dict[str, float],
+        ledger: ImmutableDoubleEntryLedger | None = None,
     ) -> ReconciliationResultSummary:
         t0 = time.perf_counter()
 
@@ -208,17 +212,25 @@ class SwiftCashMatchEngine:
             ledger = ImmutableDoubleEntryLedger(base_currency="EUR")
 
         # Build O(1) lookup tables
-        by_payment_id: Dict[str, PaymentCommitment] = {c.payment_id: c for c in commitments}
-        by_hash_sig: Dict[str, PaymentCommitment] = {c.hash_signature: c for c in commitments}
-        by_suffix5: Dict[str, List[PaymentCommitment]] = {}
-        by_name_token: Dict[str, List[PaymentCommitment]] = {}
-        cand_tokens_map: Dict[str, Set[str]] = {}
-        expected_gross_cents_map: Dict[str, int] = {}
+        by_payment_id: dict[str, PaymentCommitment] = {
+            c.payment_id: c for c in commitments
+        }
+        by_hash_sig: dict[str, PaymentCommitment] = {
+            c.hash_signature: c for c in commitments
+        }
+        by_suffix5: dict[str, list[PaymentCommitment]] = {}
+        by_name_token: dict[str, list[PaymentCommitment]] = {}
+        cand_tokens_map: dict[str, set[str]] = {}
+        expected_gross_cents_map: dict[str, int] = {}
 
         for c in commitments:
             suffix5 = c.payment_id[-5:]
             by_suffix5.setdefault(suffix5, []).append(c)
-            tokens = {t for t in c.student_name.upper().replace("-", " ").split() if len(t) >= 3}
+            tokens = {
+                t
+                for t in c.student_name.upper().replace("-", " ").split()
+                if len(t) >= 3
+            }
             cand_tokens_map[c.payment_id] = tokens
             for tok in tokens:
                 by_name_token.setdefault(tok, []).append(c)
@@ -227,16 +239,18 @@ class SwiftCashMatchEngine:
                 source_major = float(c.source_amount_minor)
             else:
                 source_major = c.source_amount_minor / 100.0
-            expected_gross_cents_map[c.payment_id] = int(round(source_major * fx_settle * 100.0))
+            expected_gross_cents_map[c.payment_id] = round(
+                source_major * fx_settle * 100.0
+            )
 
         # Pass 1: Candidate resolution across all incoming bank lines
-        matched_by_pid: Dict[str, List[Tuple[BankStatementLine, str]]] = {}
-        unmatched_lines: List[BankStatementLine] = []
+        matched_by_pid: dict[str, list[tuple[BankStatementLine, str]]] = {}
+        unmatched_lines: list[BankStatementLine] = []
 
         for line in bank_lines:
-            candidate: Optional[PaymentCommitment] = None
+            candidate: PaymentCommitment | None = None
             match_stage = ""
-            parsed: Optional[ParsedMT103Fields] = None
+            parsed: ParsedMT103Fields | None = None
 
             # Stage P0: Exact SHA-256 cryptographic signature (O(1), zero regex overhead)
             if line.hash_signature in by_hash_sig:
@@ -249,22 +263,31 @@ class SwiftCashMatchEngine:
                     candidate = by_payment_id[line.bank_ref]
                     match_stage = "P1"
                 else:
-                    parsed = parse_swift_mt103_narration(line.raw_mt103_narration, fallback_ref=line.bank_ref)
-                    if parsed.extracted_flw_id and parsed.extracted_flw_id in by_payment_id:
+                    parsed = parse_swift_mt103_narration(
+                        line.raw_mt103_narration, fallback_ref=line.bank_ref
+                    )
+                    if (
+                        parsed.extracted_flw_id
+                        and parsed.extracted_flw_id in by_payment_id
+                    ):
                         candidate = by_payment_id[parsed.extracted_flw_id]
                         match_stage = "P1"
 
             # Stage P2: Truncated 5-digit suffix + Ordering Customer disambiguation + Amount Window
             if candidate is None:
                 if parsed is None:
-                    parsed = parse_swift_mt103_narration(line.raw_mt103_narration, fallback_ref=line.bank_ref)
+                    parsed = parse_swift_mt103_narration(
+                        line.raw_mt103_narration, fallback_ref=line.bank_ref
+                    )
                 payer_name = line.ordering_customer or parsed.ordering_customer_50k
                 has_split_marker = bool(
-                    SPLIT_MARKER_REGEX.search(f"{line.bank_ref} {line.raw_mt103_narration} {line.hash_signature}")
+                    SPLIT_MARKER_REGEX.search(
+                        f"{line.bank_ref} {line.raw_mt103_narration} {line.hash_signature}"
+                    )
                 )
 
-                best_cand: Optional[PaymentCommitment] = None
-                best_score: Tuple[int, float, int] = (-1, -1.0, -10**12)
+                best_cand: PaymentCommitment | None = None
+                best_score: tuple[int, float, int] = (-1, -1.0, -(10**12))
 
                 for sfx in parsed.extracted_suffixes:
                     for cand in by_suffix5.get(sfx, []):
@@ -276,11 +299,19 @@ class SwiftCashMatchEngine:
                         if not (in_fee_window or is_partial_amount):
                             continue
 
-                        name_sim = _name_token_similarity(payer_name, cand.student_name) if payer_name else 1.0
+                        name_sim = (
+                            _name_token_similarity(payer_name, cand.student_name)
+                            if payer_name
+                            else 1.0
+                        )
                         # Guard against random 5-digit numbers in unrelated orphan narrations
                         if payer_name and name_sim == 0.0:
                             continue
-                        if not in_fee_window and not has_split_marker and name_sim < 0.3:
+                        if (
+                            not in_fee_window
+                            and not has_split_marker
+                            and name_sim < 0.3
+                        ):
                             continue
 
                         # Prefer candidates not yet holding a full non-split wire, then highest name similarity, then closest amount
@@ -288,7 +319,9 @@ class SwiftCashMatchEngine:
                         already_has_full_single = (
                             len(existing_lines) == 1
                             and not has_split_marker
-                            and self._is_single_wire_within_fee_window(exp_cents, existing_lines[0][0].eur_received_cents)
+                            and self._is_single_wire_within_fee_window(
+                                exp_cents, existing_lines[0][0].eur_received_cents
+                            )
                         )
                         availability_rank = 0 if already_has_full_single else 1
                         score = (availability_rank, name_sim, -abs(diff))
@@ -302,22 +335,32 @@ class SwiftCashMatchEngine:
 
                 # Fallback P2 by indexed customer name tokens + amount proximity
                 if candidate is None and payer_name:
-                    payer_tokens = {t for t in payer_name.upper().replace("-", " ").split() if len(t) >= 3}
-                    seen_cands: Set[str] = set()
-                    best_name_cand: Optional[PaymentCommitment] = None
-                    best_name_score: Tuple[int, float, int] = (-1, -1.0, -10**12)
+                    payer_tokens = {
+                        t
+                        for t in payer_name.upper().replace("-", " ").split()
+                        if len(t) >= 3
+                    }
+                    seen_cands: set[str] = set()
+                    best_name_cand: PaymentCommitment | None = None
+                    best_name_score: tuple[int, float, int] = (-1, -1.0, -(10**12))
                     for tok in payer_tokens:
                         for cand in by_name_token.get(tok, []):
                             if cand.payment_id in seen_cands:
                                 continue
                             seen_cands.add(cand.payment_id)
                             c_tokens = cand_tokens_map[cand.payment_id]
-                            overlap = len(payer_tokens & c_tokens) / len(payer_tokens | c_tokens)
+                            overlap = len(payer_tokens & c_tokens) / len(
+                                payer_tokens | c_tokens
+                            )
                             if overlap >= 0.5:
                                 exp_cents = expected_gross_cents_map[cand.payment_id]
                                 diff = exp_cents - line.eur_received_cents
                                 if abs(diff) <= self.max_intermediary_fee_cents:
-                                    unclaimed = 1 if cand.payment_id not in matched_by_pid else 0
+                                    unclaimed = (
+                                        1
+                                        if cand.payment_id not in matched_by_pid
+                                        else 0
+                                    )
                                     sc = (unclaimed, overlap, -abs(diff))
                                     if sc > best_name_score:
                                         best_name_score = sc
@@ -329,7 +372,9 @@ class SwiftCashMatchEngine:
             if candidate is None:
                 unmatched_lines.append(line)
             else:
-                matched_by_pid.setdefault(candidate.payment_id, []).append((line, match_stage))
+                matched_by_pid.setdefault(candidate.payment_id, []).append(
+                    (line, match_stage)
+                )
 
         # Pass 2: Evaluate Single-Wire Settlements (P0/P1/P2) vs. Many-to-One Split Wires (P3)
         matched_p0 = 0
@@ -344,8 +389,18 @@ class SwiftCashMatchEngine:
         total_due_cents = 0
         total_fees_cents = 0
 
-        def _settle_single_wire(cand: PaymentCommitment, line: BankStatementLine, stage: str, exp_gross_cents: int) -> None:
-            nonlocal matched_p0, matched_p1, matched_p2, clean_payments, fee_discrepancy_payments
+        def _settle_single_wire(
+            cand: PaymentCommitment,
+            line: BankStatementLine,
+            stage: str,
+            exp_gross_cents: int,
+        ) -> None:
+            nonlocal \
+                matched_p0, \
+                matched_p1, \
+                matched_p2, \
+                clean_payments, \
+                fee_discrepancy_payments
             nonlocal total_settled_cents, total_due_cents, total_fees_cents
 
             shortfall_cents = exp_gross_cents - line.eur_received_cents
@@ -359,7 +414,11 @@ class SwiftCashMatchEngine:
             else:
                 matched_p2 += 1
 
-            detected_fee_cents = max(0, shortfall_cents) if shortfall_cents >= self.fee_anomaly_threshold_cents else 0
+            detected_fee_cents = (
+                max(0, shortfall_cents)
+                if shortfall_cents >= self.fee_anomaly_threshold_cents
+                else 0
+            )
             if detected_fee_cents >= self.fee_anomaly_threshold_cents:
                 fee_discrepancy_payments += 1
                 cand.transition_to(PaymentState.RECONCILED_FEE_ADJUSTED)
@@ -385,7 +444,9 @@ class SwiftCashMatchEngine:
 
             if len(items) == 1:
                 line, stage = items[0]
-                if self._is_single_wire_within_fee_window(exp_gross_cents, line.eur_received_cents):
+                if self._is_single_wire_within_fee_window(
+                    exp_gross_cents, line.eur_received_cents
+                ):
                     _settle_single_wire(cand, line, stage, exp_gross_cents)
                 else:
                     # Single partial or out-of-bounds wire without matching sibling wire -> Quarantine
@@ -413,7 +474,9 @@ class SwiftCashMatchEngine:
 
                 matched_p3_lines += len(split_lines)
                 detected_fee_cents = (
-                    max(0, shortfall_cents) if shortfall_cents >= self.fee_anomaly_threshold_cents else 0
+                    max(0, shortfall_cents)
+                    if shortfall_cents >= self.fee_anomaly_threshold_cents
+                    else 0
                 )
                 if detected_fee_cents >= self.fee_anomaly_threshold_cents:
                     fee_discrepancy_payments += 1
@@ -438,7 +501,9 @@ class SwiftCashMatchEngine:
                 # Check if one wire is a complete single-wire settlement and the rest are duplicate/erroneous wires
                 settled_first = False
                 for line, stage in items:
-                    if not settled_first and self._is_single_wire_within_fee_window(exp_gross_cents, line.eur_received_cents):
+                    if not settled_first and self._is_single_wire_within_fee_window(
+                        exp_gross_cents, line.eur_received_cents
+                    ):
                         _settle_single_wire(cand, line, stage, exp_gross_cents)
                         settled_first = True
                     else:
@@ -462,7 +527,11 @@ class SwiftCashMatchEngine:
 
         exec_time_ms = (time.perf_counter() - t0) * 1000.0
         total_matched_lines = matched_p0 + matched_p1 + matched_p2 + matched_p3_lines
-        match_rate_pct = round((total_matched_lines / len(bank_lines)) * 100.0, 2) if bank_lines else 0.0
+        match_rate_pct = (
+            round((total_matched_lines / len(bank_lines)) * 100.0, 2)
+            if bank_lines
+            else 0.0
+        )
 
         return ReconciliationResultSummary(
             execution_time_ms=exec_time_ms,

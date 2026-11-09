@@ -7,14 +7,10 @@ Architecture: Zero placeholders, exact integer-cent double-entry ledger, Ornstei
 
 from __future__ import annotations
 
-import hashlib
-import time
-from decimal import Decimal, ROUND_HALF_EVEN
-from typing import Dict, List, Tuple
+from decimal import ROUND_HALF_EVEN, Decimal
 
 import numpy as np
 import pandas as pd
-
 from domain_ledger import (
     CURRENCY_DECIMALS,
     ImmutableDoubleEntryLedger,
@@ -37,18 +33,26 @@ from swift_cashmatch_engine import (
     SwiftCashMatchEngine,
 )
 
-
 STUDENT_NAMES_POOL = [
-    "WEI ZHANG", "PRIYA PATEL", "LIAM O CONNOR", "HARUTO TANAKA",
-    "SOFIA RODRIGUEZ", "MEI LIN CHEN", "ARJUN SHARMA", "OLIVER SMITH",
-    "YUKI SATO", "EMMA JOHNSON", "JIN WANG", "LUCAS MARTIN",
+    "WEI ZHANG",
+    "PRIYA PATEL",
+    "LIAM O CONNOR",
+    "HARUTO TANAKA",
+    "SOFIA RODRIGUEZ",
+    "MEI LIN CHEN",
+    "ARJUN SHARMA",
+    "OLIVER SMITH",
+    "YUKI SATO",
+    "EMMA JOHNSON",
+    "JIN WANG",
+    "LUCAS MARTIN",
 ]
 
 
 def simulate_fx_path_ornstein_uhlenbeck(
     s0: float,
     theta: float = 0.15,
-    mu: float = None,
+    mu: float | None = None,
     sigma: float = 0.008,
     n_hours: int = 48,
     seed: int = 42,
@@ -65,7 +69,7 @@ def simulate_fx_path_ornstein_uhlenbeck(
 def generate_institutional_commitments(
     n_payments: int = 1200,
     seed: int = 42,
-) -> Tuple[List[PaymentCommitment], Dict[str, FXRiskMetrics]]:
+) -> tuple[list[PaymentCommitment], dict[str, FXRiskMetrics]]:
     """
     Generates cross-border tuition and healthcare payment commitments with dynamically priced
     guaranteed FX quote buffers (VaR 99% + corridor margin) and Smart Corridor Routing.
@@ -73,13 +77,15 @@ def generate_institutional_commitments(
     rng = np.random.default_rng(seed)
     router = SmartCorridorRouter()
 
-    risk_by_corridor: Dict[str, FXRiskMetrics] = {
-        pair: compute_corridor_risk_metrics(cfg, horizon_hours=48, n_paths=2000, seed=seed + idx)
+    risk_by_corridor: dict[str, FXRiskMetrics] = {
+        pair: compute_corridor_risk_metrics(
+            cfg, horizon_hours=48, n_paths=2000, seed=seed + idx
+        )
         for idx, (pair, cfg) in enumerate(DEFAULT_CORRIDORS.items())
     }
 
     corridor_keys = list(DEFAULT_CORRIDORS.keys())
-    commitments: List[PaymentCommitment] = []
+    commitments: list[PaymentCommitment] = []
 
     for i in range(n_payments):
         pair = corridor_keys[int(rng.integers(0, len(corridor_keys)))]
@@ -88,17 +94,23 @@ def generate_institutional_commitments(
         decimals = CURRENCY_DECIMALS[src_ccy]
 
         raw_major = float(rng.uniform(cfg.min_amount_major, cfg.max_amount_major))
-        src_money = Money.from_major(Decimal(str(round(raw_major, decimals))), currency=src_ccy)
-
-        # Spot FX at quote moment with micro intraday noise
-        spot_at_quote = Decimal(str(round(cfg.spot_fx * (1.0 + float(rng.normal(0.0, 0.0012))), 6)))
-        buffer_bps = Decimal(str(risk_by_corridor[pair].recommended_quote_buffer_bps))
-        quoted_fx = (spot_at_quote * (Decimal("1") - buffer_bps / Decimal("10000"))).quantize(
-            Decimal("0.000001"), rounding=ROUND_HALF_EVEN
+        src_money = Money.from_major(
+            Decimal(str(round(raw_major, decimals))), currency=src_ccy
         )
 
+        # Spot FX at quote moment with micro intraday noise
+        spot_at_quote = Decimal(
+            str(round(cfg.spot_fx * (1.0 + float(rng.normal(0.0, 0.0012))), 6))
+        )
+        buffer_bps = Decimal(str(risk_by_corridor[pair].recommended_quote_buffer_bps))
+        quoted_fx = (
+            spot_at_quote * (Decimal(1) - buffer_bps / Decimal(10000))
+        ).quantize(Decimal("0.000001"), rounding=ROUND_HALF_EVEN)
+
         src_major_dec = src_money.to_major_decimal()
-        target_eur_dec = (src_major_dec * quoted_fx).quantize(Decimal("0.01"), rounding=ROUND_HALF_EVEN)
+        target_eur_dec = (src_major_dec * quoted_fx).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_EVEN
+        )
         target_eur_cents = int(target_eur_dec * 100)
 
         routing = router.select_optimal_rail(pair, target_eur_cents)
@@ -126,10 +138,10 @@ def generate_institutional_commitments(
 
 
 def simulate_swift_and_local_clearing_feed(
-    commitments: List[PaymentCommitment],
-    settlement_fx_rates: Dict[str, float],
+    commitments: list[PaymentCommitment],
+    settlement_fx_rates: dict[str, float],
     seed: int = 42,
-) -> List[BankStatementLine]:
+) -> list[BankStatementLine]:
     """
     Simulates incoming Nostro bank statement lines 48h later across local rails & SWIFT MT103:
     - 91% standard single-wire settlements
@@ -139,7 +151,7 @@ def simulate_swift_and_local_clearing_feed(
     - Plus 15 orphaned bank transfers (credits without matching student reference)
     """
     rng = np.random.default_rng(seed)
-    lines: List[BankStatementLine] = []
+    lines: list[BankStatementLine] = []
 
     for c in commitments:
         outcome = rng.choice(
@@ -155,11 +167,11 @@ def simulate_swift_and_local_clearing_feed(
             if c.source_currency in ("JPY", "KRW")
             else c.source_amount_minor / 100.0
         )
-        gross_eur_cents = int(round(src_major * fx_settle * 100.0))
+        gross_eur_cents = round(src_major * fx_settle * 100.0)
 
         if outcome == "split_wires":
             # Two family wires (60% and 40%) arriving separately referencing the same FLW ID
-            part1_cents = int(round(gross_eur_cents * 0.60))
+            part1_cents = round(gross_eur_cents * 0.60)
             part2_cents = gross_eur_cents - part1_cents
             for part_idx, part_cents in enumerate((part1_cents, part2_cents), start=1):
                 tx_id = f"TX-BNK-{len(lines) + 1:06d}"
@@ -184,7 +196,9 @@ def simulate_swift_and_local_clearing_feed(
         fee_cents = 0
         charge_bearer = "OUR"
         if outcome == "fee_deducted":
-            fee_cents = int(rng.integers(1500, 3501))  # 15.00 to 35.00 EUR intermediary fee
+            fee_cents = int(
+                rng.integers(1500, 3501)
+            )  # 15.00 to 35.00 EUR intermediary fee
             charge_bearer = "SHA"
 
         net_received_cents = max(100, gross_eur_cents - fee_cents)
@@ -240,7 +254,9 @@ def simulate_swift_and_local_clearing_feed(
 
 # Backwards-compatible DataFrame wrappers for legacy callers
 def generate_payment_batch(n_payments: int = 1000, seed: int = 42) -> pd.DataFrame:
-    commitments, _ = generate_institutional_commitments(n_payments=n_payments, seed=seed)
+    commitments, _ = generate_institutional_commitments(
+        n_payments=n_payments, seed=seed
+    )
     rows = []
     for c in commitments:
         src_major = (
@@ -268,22 +284,24 @@ def generate_payment_batch(n_payments: int = 1000, seed: int = 42) -> pd.DataFra
 
 def simulate_bank_clearing_feed(
     df_payments: pd.DataFrame,
-    settlement_fx_rates: Dict[str, float],
+    settlement_fx_rates: dict[str, float],
     seed: int = 42,
 ) -> pd.DataFrame:
-    commitments: List[PaymentCommitment] = []
+    commitments: list[PaymentCommitment] = []
     for _, row in df_payments.iterrows():
         corridor = str(row["corridor"])
         src_ccy = corridor.split("/")[0]
         src_minor = (
-            int(round(float(row["source_amount"])))
+            round(float(row["source_amount"]))
             if src_ccy in ("JPY", "KRW")
-            else int(round(float(row["source_amount"]) * 100))
+            else round(float(row["source_amount"]) * 100)
         )
         commitments.append(
             PaymentCommitment(
                 payment_id=str(row["payment_id"]),
-                student_name=str(row.get("student_name", f"STUDENT {row['payment_id']}")),
+                student_name=str(
+                    row.get("student_name", f"STUDENT {row['payment_id']}")
+                ),
                 institution_id="UNIV-EU-01",
                 corridor=corridor,
                 source_currency=src_ccy,
@@ -291,11 +309,13 @@ def simulate_bank_clearing_feed(
                 source_amount_minor=src_minor,
                 quoted_fx_rate=Decimal(str(row["quoted_fx"])),
                 market_fx_at_quote=Decimal(str(row["market_fx_at_quote"])),
-                target_eur_due_cents=int(round(float(row["target_eur_due"]) * 100)),
+                target_eur_due_cents=round(float(row["target_eur_due"]) * 100),
                 hash_signature=str(row["hash_signature"]),
             )
         )
-    lines = simulate_swift_and_local_clearing_feed(commitments, settlement_fx_rates, seed=seed)
+    lines = simulate_swift_and_local_clearing_feed(
+        commitments, settlement_fx_rates, seed=seed
+    )
     return pd.DataFrame(
         [
             {
@@ -315,21 +335,23 @@ def simulate_bank_clearing_feed(
 def run_reconciliation_engine(
     df_payments: pd.DataFrame,
     df_bank: pd.DataFrame,
-    settlement_fx_rates: Dict[str, float],
-) -> Dict[str, object]:
-    commitments: List[PaymentCommitment] = []
+    settlement_fx_rates: dict[str, float],
+) -> dict[str, object]:
+    commitments: list[PaymentCommitment] = []
     for _, row in df_payments.iterrows():
         corridor = str(row["corridor"])
         src_ccy = corridor.split("/")[0]
         src_minor = (
-            int(round(float(row["source_amount"])))
+            round(float(row["source_amount"]))
             if src_ccy in ("JPY", "KRW")
-            else int(round(float(row["source_amount"]) * 100))
+            else round(float(row["source_amount"]) * 100)
         )
         commitments.append(
             PaymentCommitment(
                 payment_id=str(row["payment_id"]),
-                student_name=str(row.get("student_name", f"STUDENT {row['payment_id']}")),
+                student_name=str(
+                    row.get("student_name", f"STUDENT {row['payment_id']}")
+                ),
                 institution_id="UNIV-EU-01",
                 corridor=corridor,
                 source_currency=src_ccy,
@@ -337,17 +359,17 @@ def run_reconciliation_engine(
                 source_amount_minor=src_minor,
                 quoted_fx_rate=Decimal(str(row["quoted_fx"])),
                 market_fx_at_quote=Decimal(str(row["market_fx_at_quote"])),
-                target_eur_due_cents=int(round(float(row["target_eur_due"]) * 100)),
+                target_eur_due_cents=round(float(row["target_eur_due"]) * 100),
                 hash_signature=str(row["hash_signature"]),
             )
         )
 
-    bank_lines: List[BankStatementLine] = []
+    bank_lines: list[BankStatementLine] = []
     for _, row in df_bank.iterrows():
         cents = (
             int(row["eur_received_cents"])
             if "eur_received_cents" in row
-            else int(round(float(row["eur_received"]) * 100))
+            else round(float(row["eur_received"]) * 100)
         )
         bank_lines.append(
             BankStatementLine(
@@ -387,17 +409,27 @@ def run_reconciliation_engine(
     }
 
 
-def run_benchmark() -> Dict[str, object]:
-    print("========================================================================================")
-    print("FLYWIRE PoC v2.0: INSTITUTIONAL FX RISK (VaR/CVaR), SMART ROUTING & DOUBLE-ENTRY LEDGER")
-    print("========================================================================================")
+def run_benchmark() -> dict[str, object]:
+    print(
+        "========================================================================================"
+    )
+    print(
+        "FLYWIRE PoC v2.0: INSTITUTIONAL FX RISK (VaR/CVaR), SMART ROUTING & DOUBLE-ENTRY LEDGER"
+    )
+    print(
+        "========================================================================================"
+    )
 
     n_payments = 1200
-    commitments, risk_metrics = generate_institutional_commitments(n_payments=n_payments, seed=42)
+    commitments, risk_metrics = generate_institutional_commitments(
+        n_payments=n_payments, seed=42
+    )
 
     # Simulate 48-hour realized FX trajectories across all 4 corridors
-    settlement_rates: Dict[str, float] = {}
-    print("[1] QUANTITATIVE FX RISK ENGINE (48h T+2 Ornstein-Uhlenbeck Window | 2,000 MC Paths):")
+    settlement_rates: dict[str, float] = {}
+    print(
+        "[1] QUANTITATIVE FX RISK ENGINE (48h T+2 Ornstein-Uhlenbeck Window | 2,000 MC Paths):"
+    )
     for idx, (pair, cfg) in enumerate(DEFAULT_CORRIDORS.items()):
         path = simulate_ou_fx_paths(
             s0=cfg.spot_fx,
@@ -417,21 +449,31 @@ def run_benchmark() -> Dict[str, object]:
         )
 
     # OU Parameter Calibration Demonstration from historical series
-    usd_sample = simulate_ou_fx_paths(s0=0.9250, theta=0.18, mu=0.9250, sigma=0.0065, n_hours=720, seed=777)
+    usd_sample = simulate_ou_fx_paths(
+        s0=0.9250, theta=0.18, mu=0.9250, sigma=0.0065, n_hours=720, seed=777
+    )
     calib = calibrate_ou_parameters_from_history(usd_sample, dt_days=1.0 / 24.0)
-    print(f"    [*] Calibration Demo (USD/EUR 720h): theta={calib.theta:.2f}/day | mu={calib.mu:.4f} | sigma={calib.ou_sigma:.4f} | R²={calib.r_squared:.2f}")
+    print(
+        f"    [*] Calibration Demo (USD/EUR 720h): theta={calib.theta:.2f}/day | mu={calib.mu:.4f} | sigma={calib.ou_sigma:.4f} | R²={calib.r_squared:.2f}"
+    )
 
     # Smart Payment Routing benchmark across corridors
     router = SmartCorridorRouter()
-    print("\n[2] SMART CORRIDOR ROUTING OPTIMIZER (Local Receiving Accounts vs. SWIFT MT103 SHA):")
+    print(
+        "\n[2] SMART CORRIDOR ROUTING OPTIMIZER (Local Receiving Accounts vs. SWIFT MT103 SHA):"
+    )
     for pair in DEFAULT_CORRIDORS:
-        decision = router.select_optimal_rail(pair, amount_eur_cents=850_000)  # 8,500.00 EUR tuition
+        decision = router.select_optimal_rail(
+            pair, amount_eur_cents=850_000
+        )  # 8,500.00 EUR tuition
         print(
             f"    - {pair:<7} | Selected: {decision.selected_rail_id:<28} ({decision.settlement_hours}h) | "
             f"Savings vs SWIFT: {decision.expected_savings_cents / 100.0:>6.2f} EUR ({decision.expected_savings_bps:>5.1f} bps)"
         )
 
-    bank_lines = simulate_swift_and_local_clearing_feed(commitments, settlement_rates, seed=42)
+    bank_lines = simulate_swift_and_local_clearing_feed(
+        commitments, settlement_rates, seed=42
+    )
     ledger = ImmutableDoubleEntryLedger(base_currency="EUR")
     engine = SwiftCashMatchEngine()
 
@@ -444,15 +486,33 @@ def run_benchmark() -> Dict[str, object]:
     chain_ok = ledger.verify_hash_chain()
     tb = summary.ledger_trial_balance
 
-    print(f"\n[3] SWIFT MT103 / ISO 20022 CASHMATCH RECONCILIATION ({summary.bank_lines_total} Bank Lines):")
-    print(f"    - Stage P0 (SHA-256 Cryptographic Hash): {summary.matched_p0_hash} lines")
-    print(f"    - Stage P1 (Exact FLW-XXXXXX Reference): {summary.matched_p1_exact_ref} lines")
-    print(f"    - Stage P2 (Truncated Suffix + Fuzzy):   {summary.matched_p2_heuristic} lines")
-    print(f"    - Stage P3 (Many-to-One Split Wires):    {summary.matched_p3_split_wires} partial wires consolidated")
-    print(f"    - Cleanly Reconciled Commitments:        {summary.reconciled_clean_payments}")
-    print(f"    - Intermediary Fee Anomalies (SHA/BEN):  {summary.discrepancy_fee_payments} (flagged & accounted)")
-    print(f"    - Stage P4 Quarantined Orphan Wires:     {summary.orphaned_wires_count} (isolated in Suspense)")
-    print(f"    - Overall Bank Line Match Rate:          {summary.reconciliation_rate_pct:.2f}%")
+    print(
+        f"\n[3] SWIFT MT103 / ISO 20022 CASHMATCH RECONCILIATION ({summary.bank_lines_total} Bank Lines):"
+    )
+    print(
+        f"    - Stage P0 (SHA-256 Cryptographic Hash): {summary.matched_p0_hash} lines"
+    )
+    print(
+        f"    - Stage P1 (Exact FLW-XXXXXX Reference): {summary.matched_p1_exact_ref} lines"
+    )
+    print(
+        f"    - Stage P2 (Truncated Suffix + Fuzzy):   {summary.matched_p2_heuristic} lines"
+    )
+    print(
+        f"    - Stage P3 (Many-to-One Split Wires):    {summary.matched_p3_split_wires} partial wires consolidated"
+    )
+    print(
+        f"    - Cleanly Reconciled Commitments:        {summary.reconciled_clean_payments}"
+    )
+    print(
+        f"    - Intermediary Fee Anomalies (SHA/BEN):  {summary.discrepancy_fee_payments} (flagged & accounted)"
+    )
+    print(
+        f"    - Stage P4 Quarantined Orphan Wires:     {summary.orphaned_wires_count} (isolated in Suspense)"
+    )
+    print(
+        f"    - Overall Bank Line Match Rate:          {summary.reconciliation_rate_pct:.2f}%"
+    )
     print(
         f"    - CashMatch Engine Execution Time:       {summary.execution_time_ms:.2f} ms "
         f"({summary.execution_time_ms / summary.bank_lines_total * 1000:.2f} us/line)"
@@ -460,24 +520,49 @@ def run_benchmark() -> Dict[str, object]:
 
     print("\n[4] IMMUTABLE DOUBLE-ENTRY GENERAL LEDGER TRIAL BALANCE (INTEGER CENTS):")
     print(f"    - Total Journal Entries Posted:          {tb['journal_entries_count']}")
-    print(f"    - Total Debits  (Integer Cents):         {tb['total_debits_cents']:,} cents ({tb['total_debits_cents']/100:,.2f} EUR)")
-    print(f"    - Total Credits (Integer Cents):         {tb['total_credits_cents']:,} cents ({tb['total_credits_cents']/100:,.2f} EUR)")
-    print(f"    - Nostro Clearing Cash (1010):           {tb['nostro_cash_cents']/100:,.2f} EUR")
-    print(f"    - Institution Payable (2010):            {tb['institution_payable_cents']/100:,.2f} EUR")
-    print(f"    - Suspense Orphan Liability (2090):      {tb['suspense_liability_cents']/100:,.2f} EUR")
-    print(f"    - Gross FX Spread Revenue (4010):        +{tb['gross_fx_revenue_cents']/100:,.2f} EUR")
-    print(f"    - Correspondent Bank Fees (5010):        -{tb['correspondent_fee_expense_cents']/100:,.2f} EUR")
-    print(f"    - Net Realized Operating Margin:         +{tb['net_operating_margin_cents']/100:,.2f} EUR")
-    print(f"    - Accounting Discrepancy (Cents):        {tb['accounting_discrepancy_cents']} cents (Balanced: {tb['is_balanced']})")
-    print(f"    - SHA-256 Cryptographic Chain Verified:  {chain_ok} (Tip: {ledger.last_hash[:16]}...)")
+    print(
+        f"    - Total Debits  (Integer Cents):         {tb['total_debits_cents']:,} cents ({tb['total_debits_cents'] / 100:,.2f} EUR)"
+    )
+    print(
+        f"    - Total Credits (Integer Cents):         {tb['total_credits_cents']:,} cents ({tb['total_credits_cents'] / 100:,.2f} EUR)"
+    )
+    print(
+        f"    - Nostro Clearing Cash (1010):           {tb['nostro_cash_cents'] / 100:,.2f} EUR"
+    )
+    print(
+        f"    - Institution Payable (2010):            {tb['institution_payable_cents'] / 100:,.2f} EUR"
+    )
+    print(
+        f"    - Suspense Orphan Liability (2090):      {tb['suspense_liability_cents'] / 100:,.2f} EUR"
+    )
+    print(
+        f"    - Gross FX Spread Revenue (4010):        +{tb['gross_fx_revenue_cents'] / 100:,.2f} EUR"
+    )
+    print(
+        f"    - Correspondent Bank Fees (5010):        -{tb['correspondent_fee_expense_cents'] / 100:,.2f} EUR"
+    )
+    print(
+        f"    - Net Realized Operating Margin:         +{tb['net_operating_margin_cents'] / 100:,.2f} EUR"
+    )
+    print(
+        f"    - Accounting Discrepancy (Cents):        {tb['accounting_discrepancy_cents']} cents (Balanced: {tb['is_balanced']})"
+    )
+    print(
+        f"    - SHA-256 Cryptographic Chain Verified:  {chain_ok} (Tip: {ledger.last_hash[:16]}...)"
+    )
 
     # SQLite ACID Storage demonstration
     storage = SQLiteLedgerStorage("flywire_ledger.db")
     saved_entries = storage.save_ledger(ledger, incremental=True)
     sql_tb = storage.compute_sql_trial_balance()
     sql_chain_ok = storage.verify_stored_hash_chain()
-    print(f"    - SQLite ACID Storage (flywire_ledger.db): {storage.get_entry_count()} entries stored ({saved_entries} newly saved) | SQL Balanced: {sql_tb['is_balanced']} | Hash Chain: {sql_chain_ok}")
-    print("========================================================================================")
+    print(
+        f"    - SQLite ACID Storage (flywire_ledger.db): {storage.get_entry_count()} entries stored ({saved_entries} newly saved) | SQL Balanced: {sql_tb['is_balanced']} | Hash Chain: {sql_chain_ok}"
+    )
+    print(
+        "========================================================================================"
+    )
+    storage.close()
 
     return {
         "summary": summary,

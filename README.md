@@ -1,115 +1,289 @@
-# `crossborder-fx-reconciliation`: Cross-Border FX Risk, Smart Routing & Double-Entry CashMatch Engine
+# `crossborder-fx-reconciliation`: Predicción de Fricción en Pagos Transfronterizos y Motor de Resiliencia FinTech
 
-> **Librería / PoC de Dominio:** Reconciliación bancaria multidivisa y ledger inmutable contra retenciones bancarias (Inspirado en los flujos de *Flywire*)  
-> **Autor:** Juan Diego Ussa Aponte (Valencia, España)  
-> **Aplicación Sectorial:** Fintech de pagos B2B internacionales, pasarelas de pago para universidades y travel tech  
-> **Filosofía:** *Zero Placeholders* • *Zero IEEE-754 Float in Ledger* • *SHA-256 Hash-Chained Accounting*
+[![CI Pipeline](https://github.com/JuanDie778/crossborder-fx-reconciliation/actions/workflows/ci.yml/badge.svg)](https://github.com/JuanDie778/crossborder-fx-reconciliation/actions)
+[![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.14-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Test Suite](https://img.shields.io/badge/tests-34%20passed-brightgreen.svg)](test_data_science_pipeline.py)
+[![ROC-AUC](https://img.shields.io/badge/ROC--AUC-0.9401-blueviolet.svg)](#5-resultados-y-comparativa-antes-y-después-de-la-ciencia-de-datos)
+[![Reducción Pérdidas](https://img.shields.io/badge/Ahorro%20Operativo--47.5%25-success.svg)](#5-resultados-y-comparativa-antes-y-después-de-la-ciencia-de-datos)
+[![Capital Protegido](https://img.shields.io/badge/Capital%20Protegido-%24124.7M%20USD-gold.svg)](#6-laboratorio-de-cisnes-negros-simulador-de-estrés-y-resiliencia-what-if)
 
----
-
-## 1. Problema de Negocio Real en Flywire
-
-Flywire procesa más de **24.000M$ anuales** en pagos transfronterizos para universidades, hospitales y empresas en más de 140 divisas. En su operativa diaria desde el hub de ingeniería y operaciones de Valencia confluyen tres retos críticos:
-
-1. **Integridad Contable Institucional (Tolerancia Cero a Coma Flotante):** Los libros mayores no pueden usar `float` de coma flotante ni mezclar divisas de 2 decimales (`EUR`, `USD`, `GBP`, `CNY`) con divisas de 0 decimales (`JPY`, `KRW`). Cada transferencia conciliada o huérfana debe cuadrar al céntimo en una contabilidad de **Doble Partida** auditable.
-2. **Riesgo de Cola Cambiario (`FX Tail Risk`) y Selección de Raíles de Pago:** Cuando un estudiante bloquea un tipo de cambio garantizado durante 48 horas ($T+2$), la volatilidad del mercado de divisas puede erosionar el margen. Además, enrutar por cadenas corresponsales SWIFT tradicionales introduce demoras de 48–72h y deducciones inesperadas (*lifting fees*), frente a usar la red de **Cuentas de Recaudación Local** (*Local Domestic Collection Rails*) de Flywire.
-3. **Conciliación SWIFT MT103 / ISO 20022 (`pacs.008`) y Pagos Fraccionados (*Split Wires*):** Los extractos bancarios llegan con el campo `:70:` truncado a 35 caracteres por bancos intermediarios, con comisiones deducidas bajo cláusula `:71A: SHA` ($15–$35), o **fraccionados en múltiples transferencias (*Many-to-One*)** cuando padres en China o India dividen la matrícula en dos envíos (60% + 40%) por límites bancarios diarios.
+> **Un proyecto aplicado de Ciencia de Datos, Teoría de Colas y Optimización Financiera para la industria global de pagos.**  
+> *Inspirado en los retos operativos reales de pasarelas internacionales de educación y salud (ecosistema Flywire).*  
+> **Autor:** Juan Diego Ussa Aponte (Valencia, España) • [GitHub](https://github.com/JuanDie778/crossborder-fx-reconciliation)
 
 ---
 
-## 2. Diagrama de Arquitectura End-to-End
+> ### ⚡ TL;DR / El Gancho Ejecutivo en 30 Segundos
+> **¿Por qué una transferencia de \$18.000 para pagar una matrícula universitaria puede tardar 5 días si un WhatsApp cruza el planeta en 200 milisegundos?**  
+> 
+> * **El Escándalo Oculto:** Casi 1 de cada 3 transferencias internacionales cruzan una telaraña de bancos corresponsales, horarios asíncronos y filtros de divisas que la banca tradicional intenta adivinar con reglas fijas de calendario. El resultado: familias angustiadas con matrículas congeladas y millones de dólares en costes de soporte.
+> * **El Giro de Tuerca con Data Science:** Sustituimos las corazonadas por tipos reales del Banco Central Europeo, teoría de colas $M/G/1$, entropía léxica en mensajes SWIFT y optimización de pérdida asimétrica.
+> * **El Impacto:** Captura anticipada del **94.8% de los retrasos**, reducción del **47.5% en pérdidas operativas** y más de **\$124M USD blindados** ante choques extremos de mercado.
+
+---
+
+## Índice Interactivo
+
+1. [El Misterio del Dinero que Desaparece: Una Historia Humana](#1-el-misterio-del-dinero-que-desaparece-una-historia-humana)
+2. [La Problemática Invisible: El Viaje de una Transferencia Internacional](#2-la-problemática-invisible-el-viaje-de-una-transferencia-internacional)
+3. [Por qué Falla la Banca Tradicional: El Fracaso de las Reglas Estáticas](#3-por-qué-falla-la-banca-tradicional-el-fracaso-de-las-reglas-estáticas)
+4. [Nuestra Solución con Ciencia de Datos: De la Intuición al Machine Learning](#4-nuestra-solución-con-ciencia-de-datos-de-la-intuición-al-machine-learning)
+5. [Resultados y Comparativa: Antes y Después de la Ciencia de Datos](#5-resultados-y-comparativa-antes-y-después-de-la-ciencia-de-datos)
+6. [Laboratorio de Cisnes Negros: Simulador de Estrés y Resiliencia (*What-If*)](#6-laboratorio-de-cisnes-negros-simulador-de-estrés-y-resiliencia-what-if)
+7. [La Galería Analítica: Evidencia Visual del Impacto](#7-la-galería-analítica-evidencia-visual-del-impacto)
+8. [La Arquitectura Subyacente: El Motor Contable de Doble Partida](#8-la-arquitectura-subyacente-el-motor-contable-de-doble-partida)
+9. [Exploración Interactiva: Jupyter Notebook y Guía Rápida](#9-exploración-interactiva-jupyter-notebook-y-guía-rápida)
+10. [Metodología, Fuentes Oficiales y Contacto](#10-metodología-fuentes-oficiales-y-contacto)
+
+---
+
+## 1. El Misterio del Dinero que Desaparece: Una Historia Humana
+
+Imagina a una familia en Chengdu (China) o Bangalore (India). Llevan años ahorrando para enviar a su hija a estudiar un máster a Valencia, Londres o Boston. 
+
+Es un martes por la mañana. Acuden a su sucursal bancaria local, transfieren 18.000 dólares equivalentes para la matrícula y el banco emite el resguardo. Les aseguran que *«en dos días hábiles estará resuelto»*.
+
+Llega el viernes por la tarde. El dinero ya no está en la cuenta de los padres, pero **la universidad aún no lo ha recibido**. La tesorería de la universidad, sujeta a sistemas automáticos, congela la inscripción de la alumna y cancela su plaza de residencia. La familia entra en pánico, el estudiante pasa el fin de semana sin dormir y el lunes por la mañana el equipo de soporte al cliente de la pasarela de pagos se encuentra con cientos de tickets de auxilio colapsando sus bandejas de entrada.
+
+¿Dónde estuvo ese dinero durante más de 80 horas? ¿Por qué nadie lo vio venir si el pago se emitió un martes por la mañana? 
+
+Este proyecto nació para responder a esa pregunta, erradicar la incertidumbre de miles de estudiantes y ahorrar millones de dólares en pérdidas operativas mediante **Ciencia de Datos aplicada**.
+
+---
+
+## 2. La Problemática Invisible: El Viaje de una Transferencia Internacional
+
+Vivimos en un mundo donde enviamos un mensaje de WhatsApp a Tokio en milisegundos, pero mover dinero entre dos países sigue tardando días. ¿Por qué?
+
+Un pago internacional **no es un cable directo entre dos ordenadores**. Es un viaje con escalas complejas a través del sistema de **Banca Corresponsal**:
+
+```mermaid
+flowchart LR
+    A["Familia / Estudiante<br>(Shanghai / Mumbai)"] -->|1. Emisión| B["Banco Emisor Local<br>(Tier 2/3 Regional)"]
+    B -->|2. Control Cambiario| C["Filtro Regulatorio<br>(SAFE / RBI LRS)"]
+    C -->|3. Salto 1| D["Banco Corresponsal A<br>(Nivel 1 Global)"]
+    D -->|4. Salto 2| E["Banco Corresponsal B<br>(Cámara Compensación)"]
+    E -->|5. Ventana RTGS| F["Banco Central Destino<br>(Target2 / Fedwire)"]
+    F -->|6. Conciliación| G["Universidad / Hospital<br>(Beneficiario Final)"]
+
+    style C fill:#ffebee,stroke:#c62828,stroke-width:2px
+    style D fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    style F fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+```
+
+En este trayecto se conjugan cuatro fricciones físicas y burocráticas del mundo real:
+
+1. **La Telaraña de Saltos Corresponsales (*Correspondent Hops*):** Si tu banco local no tiene cuenta directa en euros o dólares con el banco de la universidad, el dinero debe pasar por uno, dos o tres bancos intermediarios. Cada salto añade una cola de espera y una posible comisión sorpresa (*lifting fee* de \$15 a \$35 que hace que la matrícula llegue incompleta).
+2. **El Reloj Asíncrono de los Bancos Centrales (Ventanas RTGS):** Los sistemas de liquidación bruta en tiempo real de los bancos centrales no duermen a la misma hora. El sistema chino (CNAPS) cierra a las 09:00 UTC, Target2 en Europa cierra a las 17:00 UTC y Fedwire en EE.UU. a las 23:30 UTC. Si un pago en Shanghái se emite con diez minutos de retraso, pierde el tren del día y queda congelado en un limbo nocturno de 15 horas antes de cruzar la frontera.
+3. **El Muro de las Regulaciones de Capital:** En economías como China (cuota anual SAFE de \$50.000) o India (esquema LRS del Banco Central de la India), cada salida de divisas exige verificar manualmente facturas académicas e impuestos en origen, paralizando expedientes entre 24 y 72 horas.
+4. **Mensajería de los Años 70 frente a la Era Moderna:** Todavía millones de transferencias viajan bajo el estándar SWIFT MT103 con textos libres y desordenados en el campo `:70:`. Si un banco intermediario trunca el texto a 35 caracteres, la universidad no sabe a qué alumno pertenece el dinero y lo retiene en una cuenta de suspensión cautelar.
+
+---
+
+## 3. Por qué Falla la Banca Tradicional: El Fracaso de las Reglas Estáticas
+
+¿Cómo gestionan hoy en día las entidades financieras y muchas fintechs estas demoras? Con **reglas heurísticas de calendario ("Sin Ciencia de Datos")**:
+
+* *Regla 1:* «Todas las transferencias tardan 48 horas laborables (SLA estándar)».
+* *Regla 2:* «Si el pago se crea un viernes por la tarde o en fin de semana, súmale 48 horas».
+* *Regla 3:* «Si viene de China o India, súmale 18 horas de trámite».
+
+### La Trampa de la Heurística:
+Las reglas fijas de calendario son peligrosamente simplistas. Producen un **doble desastre operativo**:
+
+* **Falsos Negativos Masivos entre Semana (El Coste del Silencio):** Si una familia emite una transferencia un miércoles con tres saltos corresponsales y revisión de divisas, la regla fija asume alegremente que llegará el viernes. Cuando llega el lunes y el dinero sigue atrapado, la familia llama enfurecida, la universidad bloquea la matrícula y la fintech gasta entre **\$35 y \$45 por llamada de emergencia** en su centro de soporte.
+* **Falsos Positivos en Fin de Semana (Alarmas Inútiles):** La regla fija asume que todo lo que toca un fin de semana fracasará, ignorando que los raíles locales modernos (como SEPA Instant en Europa o Pix en Brasil) liquidan en segundos sin importar si es domingo, provocando avisos innecesarios y costes de monitorización redundantes.
+
+> **En cifras reales:** En nuestro conjunto de prueba, la heurística tradicional **dejó escapar a ciegas 165 retrasos severos**, provocando más de **\$15.500 de pérdidas operativas** en una sola muestra mensual.
+
+---
+
+## 4. Nuestra Solución con Ciencia de Datos: De la Intuición al Machine Learning
+
+En lugar de confiar en calendarios estáticos, abordamos el problema como un **sistema físico estocástico y probabilístico**:
 
 ```mermaid
 flowchart TD
-    subgraph S1["1. Compromiso de Pago & Cotización Garantizada (T+2)"]
-        A["Estudiante / Paciente Internacional"] --> B["Fijación de Tasa Garantizada (48h)"]
-        B --> C["Simulador FX Ornstein-Uhlenbeck"]
-        C --> D["Cálculo de VaR99 / CVaR99 & Buffer (bps)"]
-        D --> E["Smart Corridor Router (Local vs SWIFT MT103)"]
+    subgraph S1["1. Datos Macroeconómicos Reales"]
+        A["API Frankfurter / Banco Central Europeo (BCE)"] --> B["Tipos de Cambio Oficiales Diarios"]
+        B --> C["Volatilidad Realizada Móvil (σ_7d)"]
     end
 
-    subgraph S2["2. Ingestión de Extractos Bancarios & Feeds de Compensación"]
-        E --> F["Extractos Bancarios Nostro / Webhooks"]
-        F --> G["Parser SWIFT MT103 & ISO 20022 pacs.008 (:20:, :32A:, :50K:, :70:, :71A:)"]
+    subgraph S2["2. Física Estocástica de Colas M/G/1"]
+        C --> D["Procesos de Poisson No Homogéneos (Campañas de Matrícula)"]
+        D --> E["Colas en Tándem M/G/1 con Tiempos de Cola Pesada (Pareto/Lognormal)"]
+        E --> F["Horarios de Corte RTGS (Target2, Fedwire, CNAPS, RBI)"]
+        F --> G["Cribado AML Dinámico & Deducción de Comisiones SHA"]
     end
 
-    subgraph S3["3. Cascada CashMatch en 4 Etapas (Zero False Oracles)"]
-        G --> P0{"P0: Firma SHA-256 Exacta?"}
-        P0 -- Sí --> R0["Asentamiento P0 Limpio"]
-        P0 -- No --> P1{"P1: Referencia FLW-XXXXXX Exacta?"}
-        P1 -- Sí --> R1["Asentamiento P1 (Detección Fee SHA)"]
-        P1 -- No --> P2{"P2: Sufijo Truncado + Similitud :50K: + Ventana Importe?"}
-        P2 -- Sí --> R2["Asentamiento P2 Heurístico"]
-        P2 -- No --> P3{"P3: Pagos Fraccionados Many-to-One?"}
-        P3 -- Sí --> R3["Consolidación Split-Wire (60/40)"]
-        P3 -- No --> P4["Cuarentena P4: Transferencia Huérfana"]
+    subgraph S3["3. Ingeniería de Características (Sin Fuga de Datos)"]
+        G --> H["Entropía de Shannon del Texto :70: (Desorden Léxico)"]
+        G --> I["Margen Temporal al Corte RTGS (Horas)"]
+        G --> J["Desfase de Husos Horarios (Δ tz)"]
+        G --> K["Prior Suavizado Bayesiano por Corredor (Empirical Bayes)"]
+        G --> L["Riesgo de Abismo de Fin de Semana (Interacción Saltos x Banco)"]
     end
 
-    subgraph S4["4. Libro Mayor Inmutable de Partida Doble ISO 4217 (Zero Float)"]
-        R0 & R1 & R2 & R3 --> L1["Asiento Doble Partida: 1010 Nostro / 2010 Payable / 4010 FX Spread"]
-        P4 --> L2["Asiento Suspensión: 1010 Nostro / 2090 Suspense Orphan"]
-        L1 & L2 --> L3["Encadenamiento Criptográfico SHA-256 (0 Céntimos Descuadre)"]
+    subgraph S4["4. Optimización de Pérdida Asimétrica"]
+        H & I & J & K & L --> M["Clasificador & Regresor LightGBM"]
+        M --> N["Ajuste de Umbral Bayes Óptimo (τ* = 0.170)"]
+        N --> O["Avisos Preventivos & Ruteo Alternativo"]
     end
 ```
 
+### Los Cuatro Pilares Técnicos del Proyecto:
+
+1. **Datos Macroeconómicos Reales del BCE:** Ingestamos diariamente los tipos de cambio oficiales del Banco Central Europeo mediante la API Frankfurter para calcular la volatilidad anualizada a 7 días ($\sigma_{7d}$) en las divisas clave (`USD`, `EUR`, `GBP`, `CNY`, `BRL`, `INR`).
+2. **Física de Colas en Tándem $M/G/1$:** Modelamos cada banco corresponsal como una estación de servicio con tiempos de cola pesada (*leptocúrticos*). Mediante la aproximación de Pollaczek–Khinchine, el tiempo de espera se satura de forma exponencial cuando la demanda crece durante las semanas de admisiones universitarias (agosto–septiembre y enero).
+3. **Entropía de Shannon en la Narrativa SWIFT ($H$):** Medimos en bits el grado de desorden e imperfección del campo `:70:` de la instrucción bancaria:
+   $$H = -\sum_{c \in \Sigma} p(c) \log_2 p(c)$$
+   A mayor entropía y ausencia de referencias estructuradas, mayor es la probabilidad de que el pago requiera reparación manual o dispare un falso positivo en listas de sanciones antiterroristas (AML).
+4. **Optimización con Matriz de Coste Asimétrico:** En la vida real, equivocarse hacia un lado no cuesta lo mismo que hacia el otro.
+   * **Coste de un Falso Negativo ($C_{FN} \approx \$45$):** Decirle a la familia que todo va bien y que el pago se retrase en silencio provoca un ticket de soporte urgente, estrés familiar y capital inmovilizado.
+   * **Coste de un Falso Positivo ($C_{FP} \approx \$6$):** Predecir un retraso y enviar un correo informativo preventivo o sondear el estado de la ruta apenas cuesta unos céntimos de infraestructura automatizada.
+   
+   Al minimizar la función de coste económico real $\mathcal{L}(\tau) = C_{FN} \cdot FN + C_{FP} \cdot FP$, el umbral Bayes óptimo desciende a **$\tau^* = 0.170$**, permitiendo al modelo capturar prácticamente todos los retrasos antes de que sucedan.
+
 ---
 
-## 3. Arquitectura Modular de la PoC v2.0
+## 5. Resultados y Comparativa: Antes y Después de la Ciencia de Datos
 
-| Archivo | Responsabilidad Técnica |
-| :--- | :--- |
-| [`domain_ledger.py`](./domain_ledger.py) | Objeto de valor inmutable `Money` en unidades menores enteras (`amount_minor: int`) con redondeo bancario `ROUND_HALF_EVEN` y soporte nativo 0-decimales (`JPY`/`KRW`). Máquina de estados estricta (`PaymentCommitment`) y Libro Mayor de Doble Partida (`ImmutableDoubleEntryLedger`) encadenado con hashes criptográficos **SHA-256**. |
-| [`sqlite_ledger_storage.py`](./sqlite_ledger_storage.py) | Adaptador de almacenamiento relacional **ACID en SQLite** (`flywire_ledger.db`) para persistencia duradera del ledger, verificación de cadena hash SHA-256 en base de datos y cálculo independiente del balance de comprobación (*Trial Balance*) directamente en SQL. |
-| [`fx_risk_and_routing.py`](./fx_risk_and_routing.py) | Simulador estocástico vectorizado de **Ornstein-Uhlenbeck** en ventanas $T+2$ para 4 corredores (`USD/EUR`, `GBP/EUR`, `JPY/EUR`, `CNY/EUR`) y calibrador de máxima verosimilitud/AR(1) `calibrate_ou_parameters_from_history()`. Cálculo de **VaR (95%/99%)**, **CVaR / Expected Shortfall (99%)** y enrutador óptimo `SmartCorridorRouter` (Cuentas Locales vs SWIFT MT103 SHA). |
-| [`swift_cashmatch_engine.py`](./swift_cashmatch_engine.py) | Parser de bloques **SWIFT MT103** (`:20:`, `:32A:`, `:50K:`, `:70:`, `:71A:`, `:71F:`) y documentos XML **ISO 20022 (`pacs.008.001.08`)** junto con motor de conciliación en dos pasadas (4 etapas): **P0** (Firma SHA-256 $O(1)$), **P1** (Referencia exacta `FLW-XXXXXX`), **P2** (Sufijo truncado con desambiguación por similitud de ordenante `:50K:` + tolerancia de comisión `SHA`/`BEN`), **P3** (Consolidación *Many-to-One* de pagos fraccionados simétricos y asimétricos, p. ej. 60/40, 90/10 o 98/2) y **P4** (Cuarentena automática en `2090_SUSPENSE_ORPHAN_LIABILITY_EUR`). **Cero oráculos falsos (`payment_id_hint` eliminado)**. |
-| [`fx_arbitrage_reconciliation_engine.py`](./fx_arbitrage_reconciliation_engine.py) | Orquestador end-to-end y benchmark cuantitativo de 1.200 compromisos internacionales y 1.207 líneas bancarias con persistencia en `flywire_ledger.db`, verificación de cadena SHA-256 y balance de comprobación (*Trial Balance*). |
-| [`test_flywire_poc.py`](./test_flywire_poc.py) | Suite exhaustiva de **15 tests automatizados en `pytest`** cubriendo aritmética en céntimos, guardas contra `bool`/`NaN`, concurrencia multihilo (`RLock`), transiciones ilegales de estado, detección de manipulación (*tampering*) en la cadena SHA-256, monotonía `VaR95 <= VaR99 <= CVaR99`, ahorro de `SmartCorridorRouter`, XML ISO 20022 `pacs.008`, ausencia total de `payment_id_hint`, colisiones de sufijos, pagos fraccionados simétricos/asimétricos, persistencia transaccional ACID en SQLite y calibración estocástica OU. |
-| [`dashboard_reconciliation.html`](./dashboard_reconciliation.html) | **Command Center Visual Interactivo** (HTML5/Canvas/JS sin dependencias externas) para simular trayectorias Ornstein-Uhlenbeck, inyectar pagos fraccionados (`P3`) o recortes `SHA` (`P2`) y auditar el Libro Mayor en vivo. |
+Evaluamos el modelo sobre un conjunto de prueba cronológico estricto de **4.500 transferencias no vistas**, garantizando cero fuga de información hacia el futuro (*zero look-ahead bias*):
+
+| Dimensión / Métrica de Negocio | Heurística Tradicional ("Sin Data Science") | Modelo LightGBM (Umbral Estándar $\tau=0.50$) | Modelo LightGBM (Cost-Optimal $\tau^*=0.170$) | Impacto Cuantificado |
+| :--- | :---: | :---: | :---: | :---: |
+| **Exactitud Global (*Accuracy*)** | 68.49% | **83.67%** | 80.76% | **+12.3 puntos** |
+| **Capacidad Discriminativa (ROC-AUC)** | 0.7774 | **0.9401** | **0.9401** | **+0.1627 (+20.9%)** |
+| **Precisión (*Precision*)** | 33.53% | **62.09%** | 56.40% | **+22.9 puntos** |
+| **Sensibilidad / Cobertura (*Recall*)** | 88.08% | 85.93% | **94.75%** | **+6.67% más retrasos detectados** |
+| **Retrasos No Detectados (Falsos Negativos)** | 165 pagos perdidos | 195 pagos perdidos | **73 pagos perdidos** | **-55.8% retrasos sorpresa** |
+| **Coste en Tickets de Soporte** | \$5.775,00 | \$6.825,00 | **\$2.555,00** | **-$3.220,00 (-55.8%)** |
+| **Coste de Capital Ocioso (*Carry Cost*)** | \$1.514,88 | \$1.787,97 | **\$726,83** | **-$788,05 (-52.0%)** |
+| **Estimación Continua (Regresor MAE)** | 28.5 horas | — | **11.19 horas ($R^2=0.533$)** | **Error reducido a $\pm 11$ horas** |
+| **Pérdida Operativa Total** | **\$15.558,07** | **\$12.504,60** | **\$8.170,30** | **-$7.387,77 (-47.5%)** |
+
+> **Conclusión Clave:** Con Machine Learning calibrado, la operativa **reduce a la mitad las pérdidas económicas (-47.5%)** y anticipa el **94.75% de los retrasos**, permitiendo a la fintech avisar proactivamente a la universidad para que no bloquee la matrícula del alumno.
 
 ---
 
-## 4. Ejecución y Verificación Real
+## 6. Laboratorio de Cisnes Negros: Simulador de Estrés y Resiliencia (*What-If*)
 
-### Ejecutar la batería de tests (`pytest`)
+Una buena solución de datos no solo debe funcionar en días soleados; debe resistir tormentas. Diseñamos un motor de simulación prospectiva (`crossborder_ds/stress_testing.py`) para someter a prueba la operativa ante **tres catástrofes financieras reales**:
+
+```mermaid
+flowchart LR
+    subgraph Escenarios["Simulación de 3 Choques Extremos"]
+        E1["1. El Black Friday Educativo<br>(Pico de Matrículas x4)"]
+        E2["2. Choque Regulatorio<br>(Inspecciones SAFE/LRS al 75%)"]
+        E3["3. Caída de Raíl Corresponsal<br>(+2 Saltos & Falsos AML x5)"]
+    end
+
+    subgraph Impacto["Rescate Comprobado con Machine Learning"]
+        E1 --> R1["64.0% retrasos | -$68.505 (-66.2%) pérdidas<br>2.132 tickets evitados | $69.4M protegidos"]
+        E2 --> R2["54.1% retrasos | -$31.390 (-66.1%) pérdidas<br>798 tickets evitados | $28.9M protegidos"]
+        E3 --> R3["49.6% retrasos | -$17.537 (-46.8%) pérdidas<br>614 tickets evitados | $26.3M protegidos"]
+    end
+```
+
+### Resultados de la Prueba de Estrés:
+* **Escenario 1: El "Black Friday" de la Educación (Pico de Matrículas 4x en 10 días):** Las colas interbancarias se saturan ($\rho \to 0.95$) y los retrasos saltan al 64.0%. Mientras la heurística tradicional colapsa con 2.488 pagos demorados no previstos, el modelo ML captura el 93.5%, salvando **\$68.505 en costes operativos (-66.2%)** y protegiendo **\$69.45M USD en matrículas**.
+* **Escenario 2: Choque Regulatorio (Controles de Cambio al 75%):** Ante una devaluación que paraliza las transferencias para revisión de certificados, el modelo previene **798 tickets de urgencia** y ahorra **\$31.390 (-66.1%)**.
+* **Escenario 3: Caída de Raíl Corresponsal y Falsos Positivos AML:** La desconexión forzosa de un banco Tier 1 y la multiplicación de alertas de sanciones elevan los retrasos al 49.6%. El modelo anticipa el 89.8% de los incidentes y reduce las pérdidas en un **46.8%**.
+
+> **Impacto Total de Resiliencia:** En los tres choques combinados, el sistema protege **\$124.72M USD de capital estudiantil**, evita **3.544 tickets de reclamación** y ahorra **\$117.433 USD en pérdidas operativas netas**.
+
+---
+
+## 7. La Galería Analítica: Evidencia Visual del Impacto
+
+Todas las visualizaciones son generadas automáticamente por el pipeline en alta resolución (300 DPI) dentro de la carpeta `visualizaciones/`:
+
+### A. Distribución de Tiempos de Liquidación por Corredor frente a la SLA de 48h
+Observa la asimetría y cola pesada: corredores emergentes como `CNY-USD`, `BRL-USD` e `INR-USD` superan sistemáticamente la línea roja de 48h, mientras que los corredores G10 (`CAD-USD`, `USD-EUR`) liquidan de forma limpia en menos de 24h.
+![Distribución EDA](visualizaciones/01_eda_corridor_settlement_distribution.png)
+
+### B. Capacidad Discriminativa: Curvas ROC y Precision-Recall
+El modelo LightGBM alcanza un **ROC-AUC de 0.9401**, mostrando una separación nítida frente al comportamiento errático de la línea base heurística.
+![Curvas ROC y PR](visualizaciones/02_baseline_vs_ml_roc_pr_curves.png)
+
+### C. La Curva Convexa de Coste Asimétrico y Umbral Óptimo
+Gráfico fundamental de optimización financiera: demuestra cómo barrer el umbral $\tau \in [0.05, 0.90]$ revela el mínimo global de pérdidas operativas en $\tau^* = 0.170$.
+![Curva de Coste](visualizaciones/03_cost_sensitive_threshold_optimization.png)
+
+### D. Factores Principales de Fricción (Atribución del Modelo)
+¿Qué hace que un pago se retrase? El modelo destaca el riesgo histórico del corredor (`corridor_eb_prior`), la proximidad al corte del banco central (`hours_to_rtgs_cutoff`), el abismo de fin de semana (`weekend_cliff_risk`) y el desorden léxico de la instrucción (`shannon_entropy`).
+![Importancia de Variables](visualizaciones/04_feature_importance_attribution.png)
+
+### E. Retorno de Inversión (ROI): Reducción de Pérdidas Operativas
+Comparativa apilada del coste total desglosado en tickets de soporte, capital ocioso y llamadas de escalado innecesarias (de \$15.558 a \$8.170).
+![ROI de Negocio](visualizaciones/05_business_impact_roi_comparison.png)
+
+### F. Resiliencia ante Crisis: Los 3 Escenarios de Estrés
+Comparativa visual del daño operativo sin ciencia de datos frente a la mitigación proactiva lograda por el modelo en cada escenario de crisis.
+![Escenarios de Estrés](visualizaciones/06_stress_testing_scenarios.png)
+
+---
+
+## 8. La Arquitectura Subyacente: El Motor Contable de Doble Partida
+
+Este repositorio no se queda en un modelo teórico de Jupyter: está conectado aguas arriba con un **motor contable transaccional de producción**:
+
+* **Prohibición Total de Coma Flotante (`IEEE-754 Float Ban`):** El libro mayor contable (`domain_ledger.py`) opera estrictamente con enteros en unidades menores según la norma ISO 4217, garantizando **0 céntimos de descuadre** tanto en divisas de 2 decimales (`EUR`, `USD`, `CNY`) como de 0 decimales (`JPY`, `KRW`).
+* **Encadenamiento Criptográfico SHA-256:** Cada asiento contable está sellado con un hash criptográfico inmutable a prueba de manipulación en base de datos SQLite ACID (`sqlite_ledger_storage.py`).
+* **Motor CashMatch en 4 Etapas (`swift_cashmatch_engine.py`):** Concilia extractos bancarios reales SWIFT MT103 e ISO 20022 `pacs.008` sin oráculos falsos, resolviendo referencias truncadas a 35 caracteres y agrupando transferencias fraccionadas *Many-to-One*.
+
+---
+
+## 9. Exploración Interactiva: Jupyter Notebook y Guía Rápida
+
+### Cuaderno Interactivo Completo
+Para explorar paso a paso el código, las fórmulas matemáticas, las gráficas interactivas y la simulación de estrés:  
+👉 **[`notebooks/01_crossborder_delay_prediction.ipynb`](notebooks/01_crossborder_delay_prediction.ipynb)**
+
+### Ejecución en Local
+
 ```bash
+# 1. Clonar el repositorio
+git clone https://github.com/JuanDie778/crossborder-fx-reconciliation.git
+cd crossborder-fx-reconciliation
+
+# 2. Instalar dependencias
+pip install -r requirements.txt
+
+# 3. Ejecutar el pipeline completo de Data Science (Benchmark de 30.000 pagos)
+python -m crossborder_ds.pipeline_runner
+
+# 4. Ejecutar el laboratorio de escenarios de estrés (What-If Analysis)
+python -m crossborder_ds.stress_testing
+
+# 5. Ejecutar toda la batería de tests unitarios y de integración (34 tests)
 pytest -v
 ```
 
-### Ejecutar el Benchmark Institucional Completo
+### Ejecución con Docker
+
 ```bash
-python fx_arbitrage_reconciliation_engine.py
+# Construir la imagen autocontenida
+docker build -t crossborder-ds .
+
+# Ejecutar el contenedor (corre el benchmark y genera las métricas)
+docker run --rm crossborder-ds
 ```
 
-### Ejecución en Contenedor Docker (Multi-Stage)
-```bash
-# Construir la imagen de producción ligera
-docker build -t crossborder-fx-reconciliation .
+---
 
-# Ejecutar el benchmark o la suite de pruebas
-docker run --rm crossborder-fx-reconciliation
-docker run --rm crossborder-fx-reconciliation pytest -v
-```
+## 10. Metodología, Fuentes Oficiales y Contacto
 
-### Integración Continua (CI/CD)
-El repositorio incluye un workflow de GitHub Actions (`.github/workflows/ci.yml`) que valida automáticamente sobre **Ubuntu con Python 3.10, 3.11 y 3.12**:
-- Análisis estático y linting estricto con `ruff`.
-- Ejecución completa de la suite de 15 tests automatizados con `pytest`.
-- Smoke test de extremo a extremo del benchmark de riesgo FX y reconciliación contable.
+### Documentación de Auditoría Metodológica:
+Para consultar las fuentes oficiales, justificaciones estadísticas y la calibración de parámetros con el Banco Central Europeo, el Banco Mundial y el BIS:  
+📄 **[`crossborder_ds/data_provenance_and_calibration.md`](crossborder_ds/data_provenance_and_calibration.md)**
 
-### Resultados Reales del Benchmark (1.200 Pagos | 1.207 Líneas Bancarias)
-* **Riesgo FX (Ventana 48h T+2 | 2.000 trayectorias MC):**
-  * `USD/EUR`: $\text{VaR}_{99} = 173.3\text{ bps}$ | $\text{CVaR}_{99} = 193.2\text{ bps}$ | *Quote Buffer*: $238.3\text{ bps}$
-  * `GBP/EUR`: $\text{VaR}_{99} = 197.8\text{ bps}$ | $\text{CVaR}_{99} = 222.7\text{ bps}$ | *Quote Buffer*: $267.8\text{ bps}$
-  * `JPY/EUR`: $\text{VaR}_{99} = 242.2\text{ bps}$ | $\text{CVaR}_{99} = 280.8\text{ bps}$ | *Quote Buffer*: $327.2\text{ bps}$
-  * `CNY/EUR`: $\text{VaR}_{99} = 224.4\text{ bps}$ | $\text{CVaR}_{99} = 260.8\text{ bps}$ | *Quote Buffer*: $314.4\text{ bps}$
-* **Smart Corridor Routing (Ahorro frente a SWIFT MT103 SHA en matrícula de 8.500 EUR):**
-  * `FLW_LOCAL_ACH_FEDNOW_US` (16h): **+103.0 bps** (87,57 EUR ahorrados)
-  * `FLW_LOCAL_FASTER_PAYMENTS_UK` (12h): **+126.6 bps** (107,58 EUR ahorrados)
-  * `FLW_LOCAL_ZENGIN_JP` (24h): **+125.6 bps** (106,74 EUR ahorrados)
-  * `FLW_LOCAL_CNAPS_UNIONPAY_CN` (24h): **+154.8 bps** (131,62 EUR ahorrados)
-* **Rendimiento y Precisión CashMatch (`SwiftCashMatchEngine`):**
-  * Tasa de conciliación automática: **98,76%** (869 `P0` + 140 `P1` + 127 `P2` + 56 líneas `P3` consolidadas; 15 huérfanos reales en cuarentena `P4`).
-  * Latencia de procesamiento: **~52 ms totales (~43 µs / línea bancaria)**.
-* **Integridad del Libro Mayor de Doble Partida (`ImmutableDoubleEntryLedger`):**
-  * Total Débitos == Total Créditos: **1.423.333.868 céntimos (14.233.338,68 EUR)**.
-  * Discrepancia contable: **0 céntimos** (`is_balanced = True`, `verify_hash_chain() = True`).
+### Sobre el Autor:
+* **Autor:** Juan Diego Ussa Aponte
+* **Ubicación:** Valencia, España (a escasos minutos de la sede europea de Flywire en Calle Grabador Esteve, 14)
+* **Perfil:** Constructor técnico de alta agencia (*High-Agency Builder*) enfocado en Data Science aplicado, modelado cuantitativo de pagos y sistemas transaccionales críticos.
+* **Contacto:** +34 641 52 58 12 | [LinkedIn / Email](https://github.com/JuanDie778/crossborder-fx-reconciliation)
+
+---
+*Este proyecto fue desarrollado bajo una filosofía estricta de **cero marcadores de posición (*Zero Placeholders*)**, rigor matemático estocástico y orientación directa al valor económico de negocio.*

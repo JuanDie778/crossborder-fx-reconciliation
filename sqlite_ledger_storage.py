@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
 
 from domain_ledger import (
     ImmutableDoubleEntryLedger,
@@ -36,9 +35,9 @@ class SQLiteLedgerStorage:
 
     DEFAULT_DB_FILE = "flywire_ledger.db"
 
-    def __init__(self, db_path: Union[str, Path] = DEFAULT_DB_FILE) -> None:
+    def __init__(self, db_path: str | Path = DEFAULT_DB_FILE) -> None:
         self.db_path = str(db_path)
-        self._conn: Optional[sqlite3.Connection] = None
+        self._conn: sqlite3.Connection | None = None
         self._init_db()
 
     def _get_connection(self) -> sqlite3.Connection:
@@ -119,7 +118,9 @@ class SQLiteLedgerStorage:
             )
 
         with conn:
-            cursor = conn.execute("SELECT COALESCE(MAX(sequence_no), 0) + 1 FROM journal_entries;")
+            cursor = conn.execute(
+                "SELECT COALESCE(MAX(sequence_no), 0) + 1 FROM journal_entries;"
+            )
             next_seq = cursor.fetchone()[0]
 
             conn.execute(
@@ -127,7 +128,14 @@ class SQLiteLedgerStorage:
                 INSERT INTO journal_entries (entry_id, sequence_no, reference_id, description, prev_hash, entry_hash)
                 VALUES (?, ?, ?, ?, ?, ?);
                 """,
-                (entry.entry_id, next_seq, entry.reference_id, entry.description, entry.prev_hash, entry.entry_hash),
+                (
+                    entry.entry_id,
+                    next_seq,
+                    entry.reference_id,
+                    entry.description,
+                    entry.prev_hash,
+                    entry.entry_hash,
+                ),
             )
 
             for idx, line in enumerate(entry.lines):
@@ -150,7 +158,9 @@ class SQLiteLedgerStorage:
                     ),
                 )
 
-    def save_ledger(self, ledger: ImmutableDoubleEntryLedger, incremental: bool = True) -> int:
+    def save_ledger(
+        self, ledger: ImmutableDoubleEntryLedger, incremental: bool = True
+    ) -> int:
         """
         Atomically persists entries from an in-memory ImmutableDoubleEntryLedger into SQLite.
         If incremental=True, only saves entries not already stored.
@@ -169,7 +179,9 @@ class SQLiteLedgerStorage:
 
         with conn:
             current_tip = self.get_last_hash()
-            cursor = conn.execute("SELECT COALESCE(MAX(sequence_no), 0) FROM journal_entries;")
+            cursor = conn.execute(
+                "SELECT COALESCE(MAX(sequence_no), 0) FROM journal_entries;"
+            )
             seq_counter = cursor.fetchone()[0]
 
             for entry in entries_to_save:
@@ -183,7 +195,14 @@ class SQLiteLedgerStorage:
                     INSERT INTO journal_entries (entry_id, sequence_no, reference_id, description, prev_hash, entry_hash)
                     VALUES (?, ?, ?, ?, ?, ?);
                     """,
-                    (entry.entry_id, seq_counter, entry.reference_id, entry.description, entry.prev_hash, entry.entry_hash),
+                    (
+                        entry.entry_id,
+                        seq_counter,
+                        entry.reference_id,
+                        entry.description,
+                        entry.prev_hash,
+                        entry.entry_hash,
+                    ),
                 )
 
                 for idx, line in enumerate(entry.lines):
@@ -225,7 +244,7 @@ class SQLiteLedgerStorage:
             """
         )
 
-        entries_dict: Dict[str, Dict[str, object]] = {}
+        entries_dict: dict[str, dict[str, object]] = {}
         for row in cursor.fetchall():
             eid = row["entry_id"]
             if eid not in entries_dict:
@@ -284,7 +303,7 @@ class SQLiteLedgerStorage:
             """
         )
 
-        entries_dict: Dict[str, Dict[str, object]] = {}
+        entries_dict: dict[str, dict[str, object]] = {}
         for row in cursor.fetchall():
             eid = row["entry_id"]
             if eid not in entries_dict:
@@ -324,12 +343,14 @@ class SQLiteLedgerStorage:
                 ) from exc
 
             if recomputed != data["entry_hash"]:
-                raise LedgerIntegrityError(f"Tampered entry detected in SQLite: {data['entry_id']}")
+                raise LedgerIntegrityError(
+                    f"Tampered entry detected in SQLite: {data['entry_id']}"
+                )
             expected_prev = str(data["entry_hash"])
 
         return True
 
-    def compute_sql_trial_balance(self) -> Dict[str, object]:
+    def compute_sql_trial_balance(self) -> dict[str, object]:
         """
         Executes a pure SQL aggregation of all journal lines to calculate the General Ledger trial balance
         without loading full domain objects into Python memory.
@@ -359,13 +380,22 @@ class SQLiteLedgerStorage:
             GROUP BY account_code;
             """
         )
-        acct_map = {row["account_code"]: (row["debit_cents"], row["credit_cents"]) for row in cursor.fetchall()}
+        acct_map = {
+            row["account_code"]: (row["debit_cents"], row["credit_cents"])
+            for row in cursor.fetchall()
+        }
 
         nostro_debit, nostro_credit = acct_map.get("1010_NOSTRO_CLEARING_EUR", (0, 0))
-        payable_debit, payable_credit = acct_map.get("2010_INSTITUTION_PAYABLE_EUR", (0, 0))
-        suspense_debit, suspense_credit = acct_map.get("2090_SUSPENSE_ORPHAN_LIABILITY_EUR", (0, 0))
+        payable_debit, payable_credit = acct_map.get(
+            "2010_INSTITUTION_PAYABLE_EUR", (0, 0)
+        )
+        suspense_debit, suspense_credit = acct_map.get(
+            "2090_SUSPENSE_ORPHAN_LIABILITY_EUR", (0, 0)
+        )
         fx_debit, fx_credit = acct_map.get("4010_FX_SPREAD_REVENUE_EUR", (0, 0))
-        fees_debit, fees_credit = acct_map.get("5010_CORRESPONDENT_BANK_FEES_EUR", (0, 0))
+        fees_debit, fees_credit = acct_map.get(
+            "5010_CORRESPONDENT_BANK_FEES_EUR", (0, 0)
+        )
 
         nostro_cents = nostro_debit - nostro_credit
         payable_cents = payable_credit - payable_debit
@@ -373,7 +403,9 @@ class SQLiteLedgerStorage:
         fx_revenue_cents = fx_credit - fx_debit
         fee_expense_cents = fees_debit - fees_credit
 
-        accounting_delta = nostro_cents - (payable_cents + suspense_cents + fx_revenue_cents - fee_expense_cents)
+        accounting_delta = nostro_cents - (
+            payable_cents + suspense_cents + fx_revenue_cents - fee_expense_cents
+        )
         is_balanced = (total_debits == total_credits) and (accounting_delta == 0)
 
         return {

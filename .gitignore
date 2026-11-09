@@ -27,3 +27,4 @@ gate_sync_journal.db
 # OS Artifacts
 .DS_Store
 Thumbs.db
+.ruff_cache/

@@ -35,13 +35,16 @@ COPY --from=builder /opt/venv /opt/venv
 # Create unprivileged application user
 RUN groupadd -r appgroup && useradd -r -g appgroup -d /app -s /sbin/nologin appuser
 
-# Copy domain modules, storage, engines, tests, and documentation
+# Copy domain modules, storage, engines, tests, data science package, and documentation
+COPY --chown=appuser:appgroup crossborder_ds ./crossborder_ds
+COPY --chown=appuser:appgroup data ./data
+COPY --chown=appuser:appgroup visualizaciones ./visualizaciones
+COPY --chown=appuser:appgroup notebooks ./notebooks
 COPY --chown=appuser:appgroup domain_ledger.py sqlite_ledger_storage.py fx_risk_and_routing.py swift_cashmatch_engine.py fx_arbitrage_reconciliation_engine.py ./
-COPY --chown=appuser:appgroup test_flywire_poc.py ./
+COPY --chown=appuser:appgroup test_flywire_poc.py test_data_science_pipeline.py ./
 COPY --chown=appuser:appgroup dashboard_reconciliation.html README.md requirements.txt ./
 
 USER appuser
 
-# Default execution: run the institutional cross-border FX & reconciliation benchmark
-# Can be overridden at runtime with `pytest test_flywire_poc.py -v`
-CMD ["python", "fx_arbitrage_reconciliation_engine.py"]
+# Default execution: run the Data Science benchmark and print executive impact
+CMD ["python", "-m", "crossborder_ds.pipeline_runner"]

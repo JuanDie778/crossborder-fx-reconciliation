@@ -14,12 +14,10 @@ from __future__ import annotations
 import hashlib
 import threading
 from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
+from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
 
-
-CURRENCY_DECIMALS: Dict[str, int] = {
+CURRENCY_DECIMALS: dict[str, int] = {
     "EUR": 2,
     "USD": 2,
     "GBP": 2,
@@ -59,17 +57,22 @@ class Money:
     Immutable value object representing monetary amounts strictly in integer minor units
     (e.g., EUR cents, USD cents, or whole JPY).
     """
+
     amount_minor: int
     currency: str = "EUR"
 
     def __post_init__(self) -> None:
-        if not isinstance(self.amount_minor, int) or isinstance(self.amount_minor, bool):
-            raise TypeError(f"amount_minor must be an exact int, got {type(self.amount_minor).__name__}")
+        if not isinstance(self.amount_minor, int) or isinstance(
+            self.amount_minor, bool
+        ):
+            raise TypeError(
+                f"amount_minor must be an exact int, got {type(self.amount_minor).__name__}"
+            )
         if self.currency not in CURRENCY_DECIMALS:
             raise ValueError(f"Unsupported currency code: {self.currency}")
 
     @classmethod
-    def from_major(cls, amount: Decimal | str | int | float, currency: str = "EUR") -> "Money":
+    def from_major(cls, amount: Decimal | str | float, currency: str = "EUR") -> Money:
         """Converts major currency units to exact integer minor units using Banker's Rounding."""
         if isinstance(amount, bool):
             raise TypeError("amount cannot be a boolean")
@@ -83,7 +86,9 @@ class Money:
             raise ValueError(f"Invalid monetary amount: {amount!r}") from exc
         if not dec_val.is_finite():
             raise ValueError(f"Monetary amount must be finite, got {amount!r}")
-        minor_int = int((dec_val * scale).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))
+        minor_int = int(
+            (dec_val * scale).quantize(Decimal(1), rounding=ROUND_HALF_EVEN)
+        )
         return cls(amount_minor=minor_int, currency=currency)
 
     def to_major_decimal(self) -> Decimal:
@@ -98,15 +103,17 @@ class Money:
         """For reporting/serialization only; never used for internal ledger balance mutations."""
         return float(self.to_major_decimal())
 
-    def _assert_same_currency(self, other: "Money") -> None:
+    def _assert_same_currency(self, other: Money) -> None:
         if self.currency != other.currency:
-            raise CurrencyMismatchError(f"Cannot combine {self.currency} and {other.currency}")
+            raise CurrencyMismatchError(
+                f"Cannot combine {self.currency} and {other.currency}"
+            )
 
-    def __add__(self, other: "Money") -> "Money":
+    def __add__(self, other: Money) -> Money:
         self._assert_same_currency(other)
         return Money(self.amount_minor + other.amount_minor, self.currency)
 
-    def __sub__(self, other: "Money") -> "Money":
+    def __sub__(self, other: Money) -> Money:
         self._assert_same_currency(other)
         return Money(self.amount_minor - other.amount_minor, self.currency)
 
@@ -128,7 +135,7 @@ class PaymentState(str, Enum):
     EXPIRED_QUOTE = "EXPIRED_QUOTE"
 
 
-ALLOWED_STATE_TRANSITIONS: Dict[PaymentState, Tuple[PaymentState, ...]] = {
+ALLOWED_STATE_TRANSITIONS: dict[PaymentState, tuple[PaymentState, ...]] = {
     PaymentState.QUOTE_LOCKED: (
         PaymentState.AWAITING_FUNDS,
         PaymentState.EXPIRED_QUOTE,
@@ -146,12 +153,8 @@ ALLOWED_STATE_TRANSITIONS: Dict[PaymentState, Tuple[PaymentState, ...]] = {
         PaymentState.RECONCILED_FEE_ADJUSTED,
         PaymentState.QUARANTINED_SUSPENSE,
     ),
-    PaymentState.RECONCILED_CLEAN: (
-        PaymentState.SETTLED_TO_INSTITUTION,
-    ),
-    PaymentState.RECONCILED_FEE_ADJUSTED: (
-        PaymentState.SETTLED_TO_INSTITUTION,
-    ),
+    PaymentState.RECONCILED_CLEAN: (PaymentState.SETTLED_TO_INSTITUTION,),
+    PaymentState.RECONCILED_FEE_ADJUSTED: (PaymentState.SETTLED_TO_INSTITUTION,),
     PaymentState.QUARANTINED_SUSPENSE: (
         PaymentState.RECONCILED_CLEAN,
         PaymentState.RECONCILED_FEE_ADJUSTED,
@@ -176,6 +179,7 @@ class PaymentCommitment:
     Represents a cross-border tuition or healthcare payment commitment in Flywire's core engine.
     Amounts are stored in integer minor units alongside deterministic SHA-256 signatures.
     """
+
     payment_id: str
     student_name: str
     institution_id: str
@@ -189,7 +193,7 @@ class PaymentCommitment:
     routing_provider: str = "SWIFT_CORRESPONDENT"
     state: PaymentState = PaymentState.AWAITING_FUNDS
     accumulated_received_cents: int = 0
-    matched_bank_tx_ids: List[str] = field(default_factory=list)
+    matched_bank_tx_ids: list[str] = field(default_factory=list)
     hash_signature: str = ""
 
     def __post_init__(self) -> None:
@@ -198,7 +202,9 @@ class PaymentCommitment:
                 Decimal("0.01"), rounding=ROUND_HALF_EVEN
             )
             payload = f"{self.payment_id}:{eur_dec:.2f}"
-            self.hash_signature = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+            self.hash_signature = hashlib.sha256(payload.encode("utf-8")).hexdigest()[
+                :16
+            ]
 
     def transition_to(self, new_state: PaymentState) -> None:
         allowed = ALLOWED_STATE_TRANSITIONS.get(self.state, ())
@@ -225,11 +231,17 @@ class JournalLine:
             or isinstance(self.debit_cents, bool)
             or isinstance(self.credit_cents, bool)
         ):
-            raise TypeError("JournalLine debit_cents and credit_cents must be exact integers")
+            raise TypeError(
+                "JournalLine debit_cents and credit_cents must be exact integers"
+            )
         if self.debit_cents < 0 or self.credit_cents < 0:
-            raise ValueError("JournalLine debit_cents and credit_cents must be non-negative")
+            raise ValueError(
+                "JournalLine debit_cents and credit_cents must be non-negative"
+            )
         if self.debit_cents > 0 and self.credit_cents > 0:
-            raise ValueError("A single JournalLine cannot have both positive debit and credit")
+            raise ValueError(
+                "A single JournalLine cannot have both positive debit and credit"
+            )
         if self.debit_cents == 0 and self.credit_cents == 0:
             raise ValueError("A JournalLine must have a non-zero debit or credit")
 
@@ -239,16 +251,20 @@ class JournalEntry:
     entry_id: str
     reference_id: str
     description: str
-    lines: Tuple[JournalLine, ...]
+    lines: tuple[JournalLine, ...]
     prev_hash: str
     entry_hash: str = ""
 
     def __post_init__(self) -> None:
         if len(self.lines) < 2:
-            raise UnbalancedJournalEntryError("Double-entry transaction requires at least 2 journal lines")
+            raise UnbalancedJournalEntryError(
+                "Double-entry transaction requires at least 2 journal lines"
+            )
         currencies = {line.currency for line in self.lines}
         if len(currencies) != 1:
-            raise CurrencyMismatchError(f"All lines in a JournalEntry must share settlement currency: {currencies}")
+            raise CurrencyMismatchError(
+                f"All lines in a JournalEntry must share settlement currency: {currencies}"
+            )
 
         total_debits = sum(line.debit_cents for line in self.lines)
         total_credits = sum(line.credit_cents for line in self.lines)
@@ -284,13 +300,13 @@ class ImmutableDoubleEntryLedger:
     def __init__(self, base_currency: str = "EUR") -> None:
         self.base_currency = base_currency
         self._lock = threading.RLock()
-        self._entries: List[JournalEntry] = []
-        self._account_debits: Dict[str, int] = {}
-        self._account_credits: Dict[str, int] = {}
-        self._account_types: Dict[str, LedgerAccountType] = {}
+        self._entries: list[JournalEntry] = []
+        self._account_debits: dict[str, int] = {}
+        self._account_credits: dict[str, int] = {}
+        self._account_types: dict[str, LedgerAccountType] = {}
 
     @property
-    def entries(self) -> Tuple[JournalEntry, ...]:
+    def entries(self) -> tuple[JournalEntry, ...]:
         with self._lock:
             return tuple(self._entries)
 
@@ -303,7 +319,7 @@ class ImmutableDoubleEntryLedger:
         self,
         reference_id: str,
         description: str,
-        lines: List[JournalLine],
+        lines: list[JournalLine],
     ) -> JournalEntry:
         with self._lock:
             entry_id = f"JE-{len(self._entries) + 1:06d}"
@@ -337,7 +353,9 @@ class ImmutableDoubleEntryLedger:
                     f"Broken chain link on append at {entry.entry_id}: expected {expected_prev}, got {entry.prev_hash}"
                 )
             if entry.compute_hash() != entry.entry_hash:
-                raise LedgerIntegrityError(f"Tampered entry payload detected on {entry.entry_id}")
+                raise LedgerIntegrityError(
+                    f"Tampered entry payload detected on {entry.entry_id}"
+                )
             self._entries.append(entry)
             for line in entry.lines:
                 self._account_types[line.account_code] = line.account_type
@@ -363,13 +381,19 @@ class ImmutableDoubleEntryLedger:
         - Credits Institution Payable Liability for the exact guaranteed EUR cents due to the client.
         - Credits (or Debits if negative slippage) FX Spread Revenue for the realized FX delta.
         """
-        if actual_received_cents <= 0 or target_due_cents <= 0 or correspondent_fee_cents < 0:
-            raise ValueError("Invalid negative or zero amounts in record_reconciled_payment")
+        if (
+            actual_received_cents <= 0
+            or target_due_cents <= 0
+            or correspondent_fee_cents < 0
+        ):
+            raise ValueError(
+                "Invalid negative or zero amounts in record_reconciled_payment"
+            )
 
         gross_settled_cents = actual_received_cents + correspondent_fee_cents
         gross_fx_spread_cents = gross_settled_cents - target_due_cents
 
-        lines: List[JournalLine] = [
+        lines: list[JournalLine] = [
             JournalLine(
                 account_code="1010_NOSTRO_CLEARING_EUR",
                 account_type=LedgerAccountType.ASSET_CLEARING_NOSTRO,
@@ -454,7 +478,9 @@ class ImmutableDoubleEntryLedger:
                 memo=narration[:64],
             ),
         ]
-        return self.post_entry(reference_id=bank_tx_id, description="Quarantined Orphan Wire", lines=lines)
+        return self.post_entry(
+            reference_id=bank_tx_id, description="Quarantined Orphan Wire", lines=lines
+        )
 
     def verify_hash_chain(self) -> bool:
         with self._lock:
@@ -465,44 +491,44 @@ class ImmutableDoubleEntryLedger:
                         f"Broken chain link at {entry.entry_id}: expected prev_hash={prev}, got {entry.prev_hash}"
                     )
                 if entry.compute_hash() != entry.entry_hash:
-                    raise LedgerIntegrityError(f"Tampered payload detected at {entry.entry_id}")
+                    raise LedgerIntegrityError(
+                        f"Tampered payload detected at {entry.entry_id}"
+                    )
                 prev = entry.entry_hash
             return True
 
-    def get_trial_balance(self) -> Dict[str, int]:
+    def get_trial_balance(self) -> dict[str, int]:
         with self._lock:
             total_debits = sum(self._account_debits.values())
             total_credits = sum(self._account_credits.values())
 
-            nostro_cents = (
-                self._account_debits.get("1010_NOSTRO_CLEARING_EUR", 0)
-                - self._account_credits.get("1010_NOSTRO_CLEARING_EUR", 0)
-            )
-            payable_cents = (
-                self._account_credits.get("2010_INSTITUTION_PAYABLE_EUR", 0)
-                - self._account_debits.get("2010_INSTITUTION_PAYABLE_EUR", 0)
-            )
-            suspense_cents = (
-                self._account_credits.get("2090_SUSPENSE_ORPHAN_LIABILITY_EUR", 0)
-                - self._account_debits.get("2090_SUSPENSE_ORPHAN_LIABILITY_EUR", 0)
-            )
-            fx_revenue_cents = (
-                self._account_credits.get("4010_FX_SPREAD_REVENUE_EUR", 0)
-                - self._account_debits.get("4010_FX_SPREAD_REVENUE_EUR", 0)
-            )
-            fee_expense_cents = (
-                self._account_debits.get("5010_CORRESPONDENT_BANK_FEES_EUR", 0)
-                - self._account_credits.get("5010_CORRESPONDENT_BANK_FEES_EUR", 0)
-            )
+            nostro_cents = self._account_debits.get(
+                "1010_NOSTRO_CLEARING_EUR", 0
+            ) - self._account_credits.get("1010_NOSTRO_CLEARING_EUR", 0)
+            payable_cents = self._account_credits.get(
+                "2010_INSTITUTION_PAYABLE_EUR", 0
+            ) - self._account_debits.get("2010_INSTITUTION_PAYABLE_EUR", 0)
+            suspense_cents = self._account_credits.get(
+                "2090_SUSPENSE_ORPHAN_LIABILITY_EUR", 0
+            ) - self._account_debits.get("2090_SUSPENSE_ORPHAN_LIABILITY_EUR", 0)
+            fx_revenue_cents = self._account_credits.get(
+                "4010_FX_SPREAD_REVENUE_EUR", 0
+            ) - self._account_debits.get("4010_FX_SPREAD_REVENUE_EUR", 0)
+            fee_expense_cents = self._account_debits.get(
+                "5010_CORRESPONDENT_BANK_FEES_EUR", 0
+            ) - self._account_credits.get("5010_CORRESPONDENT_BANK_FEES_EUR", 0)
 
             # Accounting identity: Assets (Nostro) == Liabilities (Payable + Suspense) + Equity (FX Revenue - Fee Expense)
-            accounting_delta = nostro_cents - (payable_cents + suspense_cents + fx_revenue_cents - fee_expense_cents)
+            accounting_delta = nostro_cents - (
+                payable_cents + suspense_cents + fx_revenue_cents - fee_expense_cents
+            )
 
             return {
                 "journal_entries_count": len(self._entries),
                 "total_debits_cents": total_debits,
                 "total_credits_cents": total_credits,
-                "is_balanced": (total_debits == total_credits) and (accounting_delta == 0),
+                "is_balanced": (total_debits == total_credits)
+                and (accounting_delta == 0),
                 "nostro_cash_cents": nostro_cents,
                 "institution_payable_cents": payable_cents,
                 "suspense_liability_cents": suspense_cents,

@@ -10,8 +10,8 @@ Covers:
 
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
-import pytest
 
+import pytest
 from domain_ledger import (
     CurrencyMismatchError,
     ImmutableDoubleEntryLedger,
@@ -25,11 +25,16 @@ from domain_ledger import (
     PaymentState,
     UnbalancedJournalEntryError,
 )
+from fx_arbitrage_reconciliation_engine import (
+    generate_payment_batch,
+    run_benchmark,
+    run_reconciliation_engine,
+    simulate_bank_clearing_feed,
+)
 from fx_risk_and_routing import (
     DEFAULT_CORRIDORS,
     OUCalibrationResult,
     SmartCorridorRouter,
-    analytical_ou_std_bps,
     calibrate_ou_parameters_from_history,
     compute_corridor_risk_metrics,
     simulate_ou_fx_paths,
@@ -40,17 +45,11 @@ from swift_cashmatch_engine import (
     SwiftCashMatchEngine,
     parse_swift_mt103_narration,
 )
-from fx_arbitrage_reconciliation_engine import (
-    generate_payment_batch,
-    run_benchmark,
-    run_reconciliation_engine,
-    simulate_bank_clearing_feed,
-)
-
 
 # ---------------------------------------------------------------------------
 # 1. Domain Ledger & Money Tests
 # ---------------------------------------------------------------------------
+
 
 def test_money_integer_enforcement_and_bankers_rounding():
     with pytest.raises(TypeError):
@@ -66,7 +65,9 @@ def test_money_integer_enforcement_and_bankers_rounding():
     with pytest.raises(ValueError):
         Money(100, "XYZ")
     with pytest.raises(TypeError):
-        JournalLine("1010_NOSTRO_CLEARING_EUR", LedgerAccountType.ASSET_CLEARING_NOSTRO, True, 0)  # type: ignore[arg-type]
+        JournalLine(
+            "1010_NOSTRO_CLEARING_EUR", LedgerAccountType.ASSET_CLEARING_NOSTRO, True, 0
+        )  # type: ignore[arg-type]
 
     # Banker's rounding (ROUND_HALF_EVEN): 10.005 -> 10.00 (1000 cents), 10.015 -> 10.02 (1002 cents)
     m_even = Money.from_major("10.005", "EUR")
@@ -77,7 +78,7 @@ def test_money_integer_enforcement_and_bankers_rounding():
     # Zero-decimal currency (JPY)
     jpy = Money.from_major("1500000", "JPY")
     assert jpy.amount_minor == 1500000
-    assert jpy.to_major_decimal() == Decimal("1500000")
+    assert jpy.to_major_decimal() == Decimal(1500000)
     assert str(jpy) == "1,500,000 JPY"
 
 
@@ -124,8 +125,18 @@ def test_double_entry_ledger_unbalanced_rejection_and_tamper_detection():
             reference_id="BAD-01",
             description="Unbalanced test",
             lines=[
-                JournalLine("1010_NOSTRO_CLEARING_EUR", LedgerAccountType.ASSET_CLEARING_NOSTRO, 10000, 0),
-                JournalLine("2010_INSTITUTION_PAYABLE_EUR", LedgerAccountType.LIABILITY_INSTITUTION_PAYABLE, 0, 9999),
+                JournalLine(
+                    "1010_NOSTRO_CLEARING_EUR",
+                    LedgerAccountType.ASSET_CLEARING_NOSTRO,
+                    10000,
+                    0,
+                ),
+                JournalLine(
+                    "2010_INSTITUTION_PAYABLE_EUR",
+                    LedgerAccountType.LIABILITY_INSTITUTION_PAYABLE,
+                    0,
+                    9999,
+                ),
             ],
         )
 
@@ -169,6 +180,7 @@ def test_double_entry_ledger_unbalanced_rejection_and_tamper_detection():
 # 2. Stochastic FX Risk (VaR/CVaR) & Smart Corridor Routing Tests
 # ---------------------------------------------------------------------------
 
+
 def test_ou_fx_simulation_and_var_cvar_monotonicity():
     with pytest.raises(ValueError):
         simulate_ou_fx_paths(s0=-1.0, n_hours=48)
@@ -182,7 +194,9 @@ def test_ou_fx_simulation_and_var_cvar_monotonicity():
     assert paths_2d.shape == (500, 48)
 
     for pair, cfg in DEFAULT_CORRIDORS.items():
-        metrics = compute_corridor_risk_metrics(cfg, horizon_hours=48, n_paths=1500, seed=42)
+        metrics = compute_corridor_risk_metrics(
+            cfg, horizon_hours=48, n_paths=1500, seed=42
+        )
         assert metrics.corridor == pair
         assert 0.0 < metrics.var_95_bps <= metrics.var_99_bps <= metrics.cvar_99_bps
         assert metrics.recommended_quote_buffer_bps > metrics.var_99_bps
@@ -192,7 +206,9 @@ def test_ou_fx_simulation_and_var_cvar_monotonicity():
 def test_smart_corridor_router_selects_local_rails():
     router = SmartCorridorRouter()
     for pair in ("USD/EUR", "GBP/EUR", "JPY/EUR", "CNY/EUR"):
-        decision = router.select_optimal_rail(pair, amount_eur_cents=1_000_000)  # 10,000 EUR
+        decision = router.select_optimal_rail(
+            pair, amount_eur_cents=1_000_000
+        )  # 10,000 EUR
         assert decision.rail_type == "LOCAL_DOMESTIC_COLLECT"
         assert decision.expected_savings_cents > 0
         assert decision.expected_savings_bps > 15.0
@@ -203,8 +219,11 @@ def test_smart_corridor_router_selects_local_rails():
 # 3. SWIFT MT103 Parser & Multi-Stage CashMatch Engine Tests
 # ---------------------------------------------------------------------------
 
+
 def test_swift_mt103_parser_extracts_fields_and_references():
-    raw = ":20:SWF99812:50K:HARUTO TANAKA TOKYO:70:TUITION PMT FLW-000452 AUTUMN:71A:SHA"
+    raw = (
+        ":20:SWF99812:50K:HARUTO TANAKA TOKYO:70:TUITION PMT FLW-000452 AUTUMN:71A:SHA"
+    )
     parsed = parse_swift_mt103_narration(raw)
     assert parsed.sender_ref_20 == "SWF99812"
     assert parsed.ordering_customer_50k == "HARUTO TANAKA TOKYO"
@@ -351,15 +370,19 @@ def test_cashmatch_p0_p1_p2_p3_split_wires_and_p4_quarantine():
 
     ledger = ImmutableDoubleEntryLedger(base_currency="EUR")
     engine = SwiftCashMatchEngine()
-    res = engine.reconcile_batch(commitments, bank_lines, settlement_rates, ledger=ledger)
+    res = engine.reconcile_batch(
+        commitments, bank_lines, settlement_rates, ledger=ledger
+    )
 
     assert res.matched_p0_hash == 1
     assert res.matched_p1_exact_ref == 1
     assert res.matched_p2_heuristic == 1
     assert res.matched_p3_split_wires == 2
     assert res.reconciled_clean_payments == 2  # FLW-000101 and FLW-000103
-    assert res.discrepancy_fee_payments == 2   # FLW-000102 (25 EUR fee) and FLW-000104 (20 EUR split fee)
-    assert res.orphaned_wires_count == 1       # TX-ORPHAN-99
+    assert (
+        res.discrepancy_fee_payments == 2
+    )  # FLW-000102 (25 EUR fee) and FLW-000104 (20 EUR split fee)
+    assert res.orphaned_wires_count == 1  # TX-ORPHAN-99
     assert res.ledger_trial_balance["is_balanced"] is True
     assert res.ledger_trial_balance["accounting_discrepancy_cents"] == 0
     assert res.ledger_trial_balance["suspense_liability_cents"] == 310000
@@ -611,6 +634,7 @@ def test_end_to_end_benchmark_and_legacy_wrappers():
 # 6. SQLite ACID Storage & OU Historical Calibration Tests
 # ---------------------------------------------------------------------------
 
+
 def test_sqlite_ledger_storage_acid_persistence_and_tamper_detection(tmp_path):
     db_file = tmp_path / "test_ledger.db"
     storage = SQLiteLedgerStorage(db_file)
@@ -618,9 +642,21 @@ def test_sqlite_ledger_storage_acid_persistence_and_tamper_detection(tmp_path):
     assert storage.get_last_hash() == ImmutableDoubleEntryLedger.GENESIS_HASH
 
     ledger = ImmutableDoubleEntryLedger(base_currency="EUR")
-    e1 = ledger.record_reconciled_payment("FLW-000001", actual_received_cents=100000, target_due_cents=98000, correspondent_fee_cents=2000)
-    e2 = ledger.record_suspense_orphan("TX-ORPHAN-01", received_cents=45000, narration="Unidentified bank transfer")
-    e3 = ledger.record_reconciled_payment("FLW-000002", actual_received_cents=250000, target_due_cents=252000, correspondent_fee_cents=0)
+    ledger.record_reconciled_payment(
+        "FLW-000001",
+        actual_received_cents=100000,
+        target_due_cents=98000,
+        correspondent_fee_cents=2000,
+    )
+    ledger.record_suspense_orphan(
+        "TX-ORPHAN-01", received_cents=45000, narration="Unidentified bank transfer"
+    )
+    ledger.record_reconciled_payment(
+        "FLW-000002",
+        actual_received_cents=250000,
+        target_due_cents=252000,
+        correspondent_fee_cents=0,
+    )
 
     # Save to SQLite and verify incremental count
     saved = storage.save_ledger(ledger, incremental=True)
@@ -654,7 +690,9 @@ def test_sqlite_ledger_storage_acid_persistence_and_tamper_detection(tmp_path):
     # Tamper detection in SQLite: alter a debit in SQLite directly
     conn = storage._get_connection()
     with conn:
-        conn.execute("UPDATE journal_lines SET debit_cents = debit_cents + 100 WHERE line_id = 1;")
+        conn.execute(
+            "UPDATE journal_lines SET debit_cents = debit_cents + 100 WHERE line_id = 1;"
+        )
 
     # Direct database audit must catch the corrupted payload
     with pytest.raises(LedgerIntegrityError):
@@ -713,4 +751,3 @@ def test_ou_parameter_calibration_from_history():
 
     with pytest.raises(ValueError, match="strictly positive"):
         calibrate_ou_parameters_from_history([0.92, 0.93, 0.94], dt_days=-1.0)
-

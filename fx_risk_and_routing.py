@@ -13,26 +13,25 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_EVEN
-from typing import Dict, List, Optional, Tuple, Union
+from decimal import ROUND_HALF_EVEN, Decimal
 
 import numpy as np
 
 
 @dataclass(frozen=True)
 class OUCalibrationResult:
-    theta: float            # Estimated mean-reversion speed per day
-    mu: float               # Estimated long-term equilibrium FX rate
-    ou_sigma: float         # Daily proportional volatility (matches CorridorConfig.ou_sigma)
-    sigma_absolute: float   # Absolute diffusion volatility
-    half_life_days: float   # Expected half-life of shocks in days (ln(2) / theta)
-    r_squared: float        # Coefficient of determination R^2 of AR(1)
-    n_observations: int     # Total observations analyzed
-    dt_days: float          # Time step in days
+    theta: float  # Estimated mean-reversion speed per day
+    mu: float  # Estimated long-term equilibrium FX rate
+    ou_sigma: float  # Daily proportional volatility (matches CorridorConfig.ou_sigma)
+    sigma_absolute: float  # Absolute diffusion volatility
+    half_life_days: float  # Expected half-life of shocks in days (ln(2) / theta)
+    r_squared: float  # Coefficient of determination R^2 of AR(1)
+    n_observations: int  # Total observations analyzed
+    dt_days: float  # Time step in days
 
 
 def calibrate_ou_parameters_from_history(
-    history: Union[List[float], np.ndarray],
+    history: list[float] | np.ndarray,
     dt_days: float = 1.0 / 24.0,
 ) -> OUCalibrationResult:
     """
@@ -56,7 +55,9 @@ def calibrate_ou_parameters_from_history(
 
     n = len(s_arr)
     if n < 3:
-        raise ValueError(f"At least 3 historical observations required for OU calibration, got {n}")
+        raise ValueError(
+            f"At least 3 historical observations required for OU calibration, got {n}"
+        )
     if np.any(s_arr <= 0):
         raise ValueError("All exchange rate observations must be strictly positive")
 
@@ -86,18 +87,24 @@ def calibrate_ou_parameters_from_history(
     a = y_mean - b * x_mean
 
     residuals = y - (a + b * x)
-    ss_res = float(np.sum(residuals ** 2))
+    ss_res = float(np.sum(residuals**2))
     ss_tot = float(np.sum((y - y_mean) ** 2))
     r_squared = float(max(0.0, 1.0 - (ss_res / ss_tot))) if ss_tot > 1e-14 else 0.0
 
-    sigma_eps = float(np.std(residuals, ddof=1)) if n_pairs > 2 else float(np.std(residuals))
+    sigma_eps = (
+        float(np.std(residuals, ddof=1)) if n_pairs > 2 else float(np.std(residuals))
+    )
     rel_residuals = residuals / x
-    sigma_rel = float(np.std(rel_residuals, ddof=1)) if n_pairs > 2 else float(np.std(rel_residuals))
+    sigma_rel = (
+        float(np.std(rel_residuals, ddof=1))
+        if n_pairs > 2
+        else float(np.std(rel_residuals))
+    )
 
     if 0.0 < b < 0.999999:
         theta = float(-math.log(b) / dt_days)
         mu = float(a / (1.0 - b))
-        var_factor = max(0.0, 2.0 * theta / (1.0 - (b ** 2)))
+        var_factor = max(0.0, 2.0 * theta / (1.0 - (b**2)))
         sigma_abs = float(sigma_eps * math.sqrt(var_factor))
         ou_sigma = float(sigma_rel * math.sqrt(var_factor))
         half_life = float(math.log(2.0) / theta) if theta > 1e-9 else float("inf")
@@ -127,14 +134,14 @@ class CorridorConfig:
     source_currency: str
     target_currency: str
     spot_fx: float
-    ou_theta: float        # Mean-reversion speed (per day)
-    ou_sigma: float        # Daily proportional volatility
-    base_margin_bps: float # Target commercial spread in basis points
+    ou_theta: float  # Mean-reversion speed (per day)
+    ou_sigma: float  # Daily proportional volatility
+    base_margin_bps: float  # Target commercial spread in basis points
     min_amount_major: float
     max_amount_major: float
 
 
-DEFAULT_CORRIDORS: Dict[str, CorridorConfig] = {
+DEFAULT_CORRIDORS: dict[str, CorridorConfig] = {
     "USD/EUR": CorridorConfig(
         pair="USD/EUR",
         source_currency="USD",
@@ -199,7 +206,9 @@ class FXRiskMetrics:
 class PaymentRailSpec:
     rail_id: str
     corridor: str
-    rail_type: str  # "LOCAL_DOMESTIC_COLLECT" | "REGIONAL_NETTING" | "SWIFT_CORRESPONDENT"
+    rail_type: (
+        str  # "LOCAL_DOMESTIC_COLLECT" | "REGIONAL_NETTING" | "SWIFT_CORRESPONDENT"
+    )
     settlement_hours: int
     fixed_fee_eur_cents: int
     variable_fee_bps: float
@@ -221,19 +230,99 @@ class RoutingDecision:
     cvar_99_slippage_bps: float
 
 
-PAYMENT_RAILS_CATALOG: List[PaymentRailSpec] = [
+PAYMENT_RAILS_CATALOG: list[PaymentRailSpec] = [
     # USD/EUR rails
-    PaymentRailSpec("FLW_LOCAL_ACH_FEDNOW_US", "USD/EUR", "LOCAL_DOMESTIC_COLLECT", 16, 150, 8.0, 0.0, 0, 0.996),
-    PaymentRailSpec("SWIFT_MT103_USD_SHA", "USD/EUR", "SWIFT_CORRESPONDENT", 48, 800, 22.0, 0.28, 2200, 0.965),
+    PaymentRailSpec(
+        "FLW_LOCAL_ACH_FEDNOW_US",
+        "USD/EUR",
+        "LOCAL_DOMESTIC_COLLECT",
+        16,
+        150,
+        8.0,
+        0.0,
+        0,
+        0.996,
+    ),
+    PaymentRailSpec(
+        "SWIFT_MT103_USD_SHA",
+        "USD/EUR",
+        "SWIFT_CORRESPONDENT",
+        48,
+        800,
+        22.0,
+        0.28,
+        2200,
+        0.965,
+    ),
     # GBP/EUR rails
-    PaymentRailSpec("FLW_LOCAL_FASTER_PAYMENTS_UK", "GBP/EUR", "LOCAL_DOMESTIC_COLLECT", 12, 120, 6.0, 0.0, 0, 0.997),
-    PaymentRailSpec("SWIFT_MT103_GBP_SHA", "GBP/EUR", "SWIFT_CORRESPONDENT", 48, 750, 20.0, 0.22, 1800, 0.970),
+    PaymentRailSpec(
+        "FLW_LOCAL_FASTER_PAYMENTS_UK",
+        "GBP/EUR",
+        "LOCAL_DOMESTIC_COLLECT",
+        12,
+        120,
+        6.0,
+        0.0,
+        0,
+        0.997,
+    ),
+    PaymentRailSpec(
+        "SWIFT_MT103_GBP_SHA",
+        "GBP/EUR",
+        "SWIFT_CORRESPONDENT",
+        48,
+        750,
+        20.0,
+        0.22,
+        1800,
+        0.970,
+    ),
     # JPY/EUR rails
-    PaymentRailSpec("FLW_LOCAL_ZENGIN_JP", "JPY/EUR", "LOCAL_DOMESTIC_COLLECT", 24, 250, 10.0, 0.0, 0, 0.995),
-    PaymentRailSpec("SWIFT_MT103_JPY_SHA", "JPY/EUR", "SWIFT_CORRESPONDENT", 60, 1200, 28.0, 0.35, 2800, 0.955),
+    PaymentRailSpec(
+        "FLW_LOCAL_ZENGIN_JP",
+        "JPY/EUR",
+        "LOCAL_DOMESTIC_COLLECT",
+        24,
+        250,
+        10.0,
+        0.0,
+        0,
+        0.995,
+    ),
+    PaymentRailSpec(
+        "SWIFT_MT103_JPY_SHA",
+        "JPY/EUR",
+        "SWIFT_CORRESPONDENT",
+        60,
+        1200,
+        28.0,
+        0.35,
+        2800,
+        0.955,
+    ),
     # CNY/EUR rails
-    PaymentRailSpec("FLW_LOCAL_CNAPS_UNIONPAY_CN", "CNY/EUR", "LOCAL_DOMESTIC_COLLECT", 24, 300, 14.0, 0.0, 0, 0.992),
-    PaymentRailSpec("SWIFT_MT103_CNY_SHA", "CNY/EUR", "SWIFT_CORRESPONDENT", 72, 1500, 35.0, 0.40, 3000, 0.945),
+    PaymentRailSpec(
+        "FLW_LOCAL_CNAPS_UNIONPAY_CN",
+        "CNY/EUR",
+        "LOCAL_DOMESTIC_COLLECT",
+        24,
+        300,
+        14.0,
+        0.0,
+        0,
+        0.992,
+    ),
+    PaymentRailSpec(
+        "SWIFT_MT103_CNY_SHA",
+        "CNY/EUR",
+        "SWIFT_CORRESPONDENT",
+        72,
+        1500,
+        35.0,
+        0.40,
+        3000,
+        0.945,
+    ),
 ]
 
 
@@ -249,7 +338,7 @@ def analytical_ou_std_bps(theta: float, sigma: float, horizon_hours: int) -> flo
     if theta <= 1e-9:
         rel_std = sigma * math.sqrt(t_days)
     else:
-        rel_var = (sigma ** 2 / (2.0 * theta)) * (1.0 - math.exp(-2.0 * theta * t_days))
+        rel_var = (sigma**2 / (2.0 * theta)) * (1.0 - math.exp(-2.0 * theta * t_days))
         rel_std = math.sqrt(max(0.0, rel_var))
     return rel_std * 10000.0
 
@@ -257,7 +346,7 @@ def analytical_ou_std_bps(theta: float, sigma: float, horizon_hours: int) -> flo
 def simulate_ou_fx_paths(
     s0: float,
     theta: float = 0.15,
-    mu: Optional[float] = None,
+    mu: float | None = None,
     sigma: float = 0.008,
     n_hours: int = 48,
     n_paths: int = 1,
@@ -320,14 +409,16 @@ def compute_corridor_risk_metrics(
     tail_losses = loss_bps[loss_bps >= var_99_bps]
     cvar_99_bps = float(np.mean(tail_losses)) if len(tail_losses) > 0 else var_99_bps
 
-    analytic_std = analytical_ou_std_bps(config.ou_theta, config.ou_sigma, horizon_hours)
+    analytic_std = analytical_ou_std_bps(
+        config.ou_theta, config.ou_sigma, horizon_hours
+    )
 
     # Quote buffer covers 99% VaR + commercial margin
     recommended_buffer_bps = round(var_99_bps + config.base_margin_bps, 2)
-    buffer_fraction = Decimal(str(recommended_buffer_bps)) / Decimal("10000")
+    buffer_fraction = Decimal(str(recommended_buffer_bps)) / Decimal(10000)
     spot_dec = Decimal(str(config.spot_fx))
     # Client locks a slightly conservative conversion factor so source_amount * quoted_fx <= expected EUR
-    guaranteed_fx = (spot_dec * (Decimal("1") - buffer_fraction)).quantize(
+    guaranteed_fx = (spot_dec * (Decimal(1) - buffer_fraction)).quantize(
         Decimal("0.000001"), rounding=ROUND_HALF_EVEN
     )
 
@@ -352,8 +443,8 @@ class SmartCorridorRouter:
 
     def __init__(
         self,
-        corridors: Optional[Dict[str, CorridorConfig]] = None,
-        rails: Optional[List[PaymentRailSpec]] = None,
+        corridors: dict[str, CorridorConfig] | None = None,
+        rails: list[PaymentRailSpec] | None = None,
     ) -> None:
         self.corridors = corridors or DEFAULT_CORRIDORS
         self.rails = rails or PAYMENT_RAILS_CATALOG
@@ -363,29 +454,33 @@ class SmartCorridorRouter:
         rail: PaymentRailSpec,
         config: CorridorConfig,
         amount_eur_cents: int,
-    ) -> Tuple[int, float]:
+    ) -> tuple[int, float]:
         # Analytical 99% CVaR approximation over rail.settlement_hours (for Gaussian tail, CVaR_99 ≈ 2.665 * std)
-        std_bps = analytical_ou_std_bps(config.ou_theta, config.ou_sigma, rail.settlement_hours)
+        std_bps = analytical_ou_std_bps(
+            config.ou_theta, config.ou_sigma, rail.settlement_hours
+        )
         cvar_99_bps = 2.665 * std_bps
 
         variable_fee_cents = (amount_eur_cents * rail.variable_fee_bps) / 10000.0
-        expected_lifting_cents = rail.intermediary_lifting_prob * rail.expected_lifting_fee_cents
+        expected_lifting_cents = (
+            rail.intermediary_lifting_prob * rail.expected_lifting_fee_cents
+        )
         slippage_risk_cost_cents = (amount_eur_cents * cvar_99_bps) / 10000.0
         # Failed/returned wire operational handling cost (~18 EUR)
         retry_penalty_cents = (1.0 - rail.auth_success_rate) * 1800.0
 
-        total_cost_cents = int(
-            round(
-                rail.fixed_fee_eur_cents
-                + variable_fee_cents
-                + expected_lifting_cents
-                + slippage_risk_cost_cents
-                + retry_penalty_cents
-            )
+        total_cost_cents = round(
+            rail.fixed_fee_eur_cents
+            + variable_fee_cents
+            + expected_lifting_cents
+            + slippage_risk_cost_cents
+            + retry_penalty_cents
         )
         return total_cost_cents, round(cvar_99_bps, 2)
 
-    def select_optimal_rail(self, corridor: str, amount_eur_cents: int) -> RoutingDecision:
+    def select_optimal_rail(
+        self, corridor: str, amount_eur_cents: int
+    ) -> RoutingDecision:
         if corridor not in self.corridors:
             raise ValueError(f"Unsupported corridor: {corridor}")
         if not isinstance(amount_eur_cents, int) or isinstance(amount_eur_cents, bool):
@@ -398,11 +493,13 @@ class SmartCorridorRouter:
         if not candidates:
             raise ValueError(f"No payment rails configured for {corridor}")
 
-        scored: List[Tuple[int, float, PaymentRailSpec]] = []
+        scored: list[tuple[int, float, PaymentRailSpec]] = []
         swift_cost_cents = 0
 
         for rail in candidates:
-            cost_cents, cvar_bps = self._estimate_rail_cost_cents(rail, config, amount_eur_cents)
+            cost_cents, cvar_bps = self._estimate_rail_cost_cents(
+                rail, config, amount_eur_cents
+            )
             scored.append((cost_cents, cvar_bps, rail))
             if rail.rail_type == "SWIFT_CORRESPONDENT":
                 swift_cost_cents = max(swift_cost_cents, cost_cents)
